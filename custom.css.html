@@ -1,0 +1,799 @@
+<style>
+  /* 
+ * CRM Seguros El Libertador - Estilos Personalizados
+ * Desarrollado para la gestión de leads de seguros
+ */
+
+  :root {
+    --primary-color: #152440;
+    --secondary-color: #FF5733;
+    --success-color: #28A745;
+    --warning-color: #FFC107;
+    --danger-color: #DC3545;
+    --light-color: #F8F9FA;
+    --dark-color: #333333;
+    --gray-color: #6c757d;
+  }
+
+  /* Estilos generales */
+  body {
+    font-family: 'Noto Sans', sans-serif;
+    background-color: #f4f6f9;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Public Sans', sans-serif;
+  }
+
+  /* Animaciones de entrada */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(1);
+    }
+
+    50% {
+      transform: scale(1.05);
+    }
+
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* Aplicar animaciones */
+  .card {
+    animation: fadeIn 0.5s ease-out;
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .card-stats .icon-big {
+    transition: all 0.3s ease;
+  }
+
+  .card-stats:hover .icon-big {
+    animation: pulse 1s infinite;
+  }
+
+  /* Estilos para la navbar */
+  .navbar-header {
+    background-color: var(--primary-color);
+  }
+
+  .search-element .input-group {
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .search-element .input-group input {
+    border-right: none;
+  }
+
+  .search-element .input-group button {
+    border-left: none;
+    background-color: white;
+  }
+
+  /* Estilos para el sidebar */
+  .sidebar .nav-item {
+    margin-bottom: 5px;
+  }
+
+  .sidebar .nav-item a {
+    border-radius: 5px;
+    transition: all 0.3s ease;
+  }
+
+  .sidebar .nav-item a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .sidebar .nav-item.active a {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Estilos para las cards de KPIs */
+  .card-stats {
+    border-radius: 10px;
+    overflow: hidden;
+    border: none;
+  }
+
+  .card-stats .card-body {
+    padding: 15px;
+  }
+
+  .card-stats .icon-big {
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .card-stats .icon-primary {
+    background-color: rgba(21, 36, 64, 0.1);
+    color: var(--primary-color);
+  }
+
+  .card-stats .icon-info {
+    background-color: rgba(23, 162, 184, 0.1);
+    color: #17a2b8;
+  }
+
+  .card-stats .icon-success {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+  }
+
+  .card-stats .icon-warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: var(--warning-color);
+  }
+
+  .card-stats .icon-danger {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+  }
+
+  .card-stats .icon-secondary {
+    background-color: rgba(108, 117, 125, 0.1);
+    color: var(--gray-color);
+  }
+
+  .card-stats .card-category {
+    font-size: 14px;
+    color: var(--gray-color);
+    margin-bottom: 5px;
+  }
+
+  .card-stats .card-title {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  /* Estilos para la datatable */
+  .table {
+    width: 100% !important;
+  }
+
+  .table th {
+    font-weight: 600;
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: rgba(21, 36, 64, 0.05);
+  }
+
+  /* Botones personalizados */
+  .btn {
+    border-radius: 5px;
+    font-weight: 500;
+    padding: 8px 16px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+  }
+
+  .btn-primary:hover {
+    background-color: #0e1a2f;
+    border-color: #0e1a2f;
+  }
+
+  .btn-success {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+  }
+
+  .btn-warning {
+    background-color: var(--warning-color);
+    border-color: var(--warning-color);
+    color: #212529;
+  }
+
+  .btn-danger {
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+  }
+
+  .btn-round {
+    border-radius: 50px;
+  }
+
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .btn-label {
+    position: relative;
+    margin-right: 5px;
+  }
+
+  /* Estilos para modales */
+  .modal-content {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  }
+
+  .modal-header {
+    border-bottom: none;
+    padding: 20px 20px 0 20px;
+  }
+
+  /* .modal-footer {
+    border-top: none;
+    padding: 0 20px 20px 20px;
+  } */
+
+  /* Estilos para formularios */
+  .form-group-default {
+    background-color: white;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    padding: 10px 15px;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+  }
+
+  .form-group-default:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(21, 36, 64, 0.25);
+  }
+
+  .form-group-default label {
+    color: var(--gray-color);
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+
+  .form-control,
+  .form-select {
+    border: none;
+    padding: 5px 0;
+    font-size: 14px;
+    background-color: transparent;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    box-shadow: none;
+  }
+
+  .form-floating {
+    margin-bottom: 15px;
+  }
+
+  /* Estilos para el progreso del funnel */
+  .progress-container {
+    width: 100%;
+    position: relative;
+    padding: 30px 0;
+  }
+
+  .progressbar {
+    counter-reset: step;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .progressbar li {
+    list-style-type: none;
+    width: 20%;
+    float: left;
+    font-size: 14px;
+    position: relative;
+    text-align: center;
+    color: var(--gray-color);
+    z-index: 1;
+  }
+
+  .progressbar li:before {
+    content: counter(step);
+    counter-increment: step;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    border: 2px solid #ddd;
+    display: block;
+    text-align: center;
+    margin: 0 auto 10px auto;
+    border-radius: 50%;
+    background-color: white;
+    z-index: 1;
+    transition: all 0.3s ease;
+  }
+
+  .progressbar li:after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: #ddd;
+    top: 20px;
+    left: -50%;
+    z-index: -1;
+  }
+
+  .progressbar li:first-child:after {
+    content: none;
+  }
+
+  .progressbar li.active {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .progressbar li.active:before {
+    border-color: var(--primary-color);
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .progressbar li.active:after {
+    background-color: var(--primary-color);
+  }
+
+  .progressbar li.active~li:after {
+    background-color: #ddd;
+  }
+
+  /* Estilos para pantallas de carga */
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: flex;
+  }
+
+  /* Estilos para notificaciones */
+  .notification {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: var(--danger-color);
+    color: white;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Estilos para tablas de información */
+  .table-hover td {
+    padding: 10px 15px;
+  }
+
+  /* Estilos para dispositivos móviles */
+  @media (max-width: 768px) {
+    .card-stats {
+      margin-bottom: 15px;
+    }
+
+    .progressbar li {
+      font-size: 12px;
+    }
+
+    .progressbar li:before {
+      width: 30px;
+      height: 30px;
+      line-height: 30px;
+    }
+
+    .progressbar li:after {
+      top: 15px;
+    }
+  }
+
+  /* Animaciones para el modal de gestión */
+  .form-etapa {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  /* Estilos para el historial de gestiones */
+  #HistorialGestiones tr {
+    transition: all 0.3s ease;
+  }
+
+  #HistorialGestiones tr:hover {
+    background-color: rgba(21, 36, 64, 0.05);
+  }
+
+  /* Estilos para el botón de gestionar */
+  .btn-gestionar {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 50px;
+    padding: 8px 15px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-gestionar:hover {
+    background-color: #0e1a2f;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(21, 36, 64, 0.2);
+  }
+
+  /* Estilos para el dropdown de usuario */
+  .dropdown-user {
+    min-width: 250px;
+  }
+
+  .user-box {
+    padding: 15px;
+    text-align: center;
+  }
+
+  .avatar-lg {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 15px auto;
+  }
+
+  .u-text h4 {
+    margin-bottom: 5px;
+    font-size: 16px;
+  }
+
+  .u-text p {
+    font-size: 12px;
+  }
+
+  /* Estilos para el footer
+  .footer {
+    padding: 15px 0;
+    border-top: 1px solid #eee;
+  } */
+
+  /* Estilos para la pantalla de carga inicial */
+  #pantallacarga {
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 9999;
+  }
+
+  /* Animación para el sidebar */
+  .sidebar_minimize .sidebar {
+    width: 80px;
+  }
+
+  .sidebar_minimize .main-panel {
+    width: calc(100% - 80px);
+  }
+
+  .sidebar_minimize_hover .sidebar {
+    width: 250px;
+  }
+
+  .sidebar_minimize_hover .main-panel {
+    width: calc(100% - 250px);
+  }
+
+  .sidebar,
+  .main-panel {
+    transition: all 0.3s ease;
+  }
+
+  :root {
+    --primary-color: #152440;
+    --secondary-color: #FF5733;
+    --success-color: #28A745;
+    --warning-color: #FFC107;
+    --danger-color: #DC3545;
+    --light-color: #F8F9FA;
+    --dark-color: #333333;
+    --gray-color: #6c757d;
+  }
+
+  body {
+    font-family: 'Noto Sans', sans-serif;
+    background-color: #f4f6f9;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Public Sans', sans-serif;
+  }
+
+  .sidebar {
+    background-color: var(--primary-color);
+    color: white;
+    height: 100vh;
+    position: fixed;
+    width: 250px;
+    transition: all 0.3s;
+  }
+
+  .sidebar-header {
+    padding: 20px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .sidebar-menu {
+    padding: 20px 0;
+  }
+
+  .sidebar-menu ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .sidebar-menu li {
+    padding: 10px 20px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .sidebar-menu li:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .sidebar-menu li.active {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .sidebar-menu i {
+    margin-right: 10px;
+  }
+
+  .main-content {
+    margin-left: 250px;
+    padding: 20px;
+    transition: all 0.3s;
+  }
+
+  .navbar {
+    background-color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  }
+
+  .card {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    transition: all 0.3s;
+  }
+
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .card-stats .icon-big {
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .card-stats .icon-primary {
+    background-color: rgba(21, 36, 64, 0.1);
+    color: var(--primary-color);
+  }
+
+  .card-stats .icon-info {
+    background-color: rgba(23, 162, 184, 0.1);
+    color: #17a2b8;
+  }
+
+  .card-stats .icon-success {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+  }
+
+  .card-stats .icon-secondary {
+    background-color: rgba(108, 117, 125, 0.1);
+    color: var(--gray-color);
+  }
+
+  .card-category {
+    font-size: 14px;
+    color: var(--gray-color);
+    margin-bottom: 5px;
+  }
+
+  .card-title {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+  }
+
+  .btn-primary:hover {
+    background-color: #0e1a2f;
+    border-color: #0e1a2f;
+  }
+
+  .table th {
+    font-weight: 600;
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: rgba(21, 36, 64, 0.05);
+  }
+
+  .btn-gestionar {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 50px;
+    padding: 8px 15px;
+    transition: all 0.3s;
+  }
+
+  .btn-gestionar:hover {
+    background-color: #0e1a2f;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(21, 36, 64, 0.2);
+  }
+
+  .progress-container {
+    width: 100%;
+    position: relative;
+    padding: 30px 0;
+  }
+
+  .progressbar {
+    counter-reset: step;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .progressbar li {
+    list-style-type: none;
+    width: 20%;
+    float: left;
+    font-size: 14px;
+    position: relative;
+    text-align: center;
+    color: var(--gray-color);
+    z-index: 1;
+  }
+
+  .progressbar li:before {
+    content: counter(step);
+    counter-increment: step;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    border: 2px solid #ddd;
+    display: block;
+    text-align: center;
+    margin: 0 auto 10px auto;
+    border-radius: 50%;
+    background-color: white;
+    z-index: 1;
+    transition: all 0.3s ease;
+  }
+
+  .progressbar li:after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: #ddd;
+    top: 20px;
+    left: -50%;
+    z-index: -1;
+  }
+
+  .progressbar li:first-child:after {
+    content: none;
+  }
+
+  .progressbar li.active {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .progressbar li.active:before {
+    border-color: var(--primary-color);
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .progressbar li.active:after {
+    background-color: var(--primary-color);
+  }
+
+  .form-etapa {
+    display: none;
+  }
+
+  .form-etapa.active {
+    display: block;
+  }
+
+  /* .footer {
+    padding: 15px 0;
+    border-top: 1px solid #eee;
+    text-align: center;
+    margin-top: 20px;
+  } */
+
+  @media (max-width: 768px) {
+    .sidebar {
+      width: 80px;
+    }
+
+    .sidebar-menu span {
+      display: none;
+    }
+
+    .main-content {
+      margin-left: 80px;
+    }
+  }
+</style>
