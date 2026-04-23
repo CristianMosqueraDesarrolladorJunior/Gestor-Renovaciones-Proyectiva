@@ -807,6 +807,8 @@ function AssignLead(deal) {
 
   let userDataleads = DataGestion.getRange("A1:K" + DataGestion.getLastRow()).getDisplayValues();
 
+  let userData;
+
   if (deal === "Renovations") {
     userData = userDataleads.filter(function (row) {
       return row[3] === "Renovations";
@@ -1030,7 +1032,8 @@ function getDatauserPro() {
     const estadosPermitidos = new Set([
       "correccion",
       "pendiente renovacion",
-      "volver a llamar"
+      "volver a llamar",
+      "recuperado"
     ]);
 
     dataFront = dataSetPlano.filter(row => {
@@ -1120,7 +1123,7 @@ function getDatauserPro() {
       };
     });
 
-    dataRecuperacion = dataSetPlano.filter(row => row[2] && row[2].toString().trim().toLowerCase() === correoActivo.trim().toLowerCase() && (row[4] !== "caso especial" || row[4] !== "enviar a expedicion")).map(row => {
+    dataRecuperacion = dataSetPlano.filter(row => row[2] && row[2].toString().trim().toLowerCase() === correoActivo.trim().toLowerCase() && (row[4] !== "caso especial" && row[4] !== "enviar a expedicion") && row[4].toString().trim().toLowerCase() !== "recuperado").map(row => {
       let leadData = parseLeadData(row[1]);
       return {
         fechaIngreso: row[0],
@@ -1507,9 +1510,11 @@ let destinatarios = {
 const message = `¡Hola ${destinatarios.datosGerente1.nombre} ! 👋\n\nAquí tienes el informe del CRM El Libertador.\n\n¡Que tengas un excelente día! ☀️`
 
 function sendWhatsappVPInteractive() {
+  var authToken = PropertiesService.getScriptProperties().getProperty('infobipAuth');
+
   const myHeaders = {
     "Content-Type": "application/json",
-    "Authorization": "Basic THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4="
+    "Authorization": "Basic " + authToken
   }
 
   const raw = JSON.stringify({

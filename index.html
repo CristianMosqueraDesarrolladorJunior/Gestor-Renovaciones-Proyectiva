@@ -31,7 +31,6 @@
     }
   </script>
   <?!= include("kaiadmin.min.js");?>
-  <?!= include("kaiadmin.min.js");?>
   <?!= include("DataTable.js");?>
   <?!= include("main.js");?>
   <!-- <?!= include("plugins.min.css");?> -->
@@ -6174,7 +6173,7 @@
                             oninput="moveToNext(this, 'otp5')">
                           <input type="text" class="otp-input" maxlength="1" id="otp5"
                             oninput="moveToNext(this, 'otp6')">
-                          <input type="text" class="otp-input" maxlength="1" id="otp6" oninput="validarOTP()">
+                          <input type="text" class="otp-input" maxlength="1" id="otp6">
                         </div>
 
                         <div class="text-center">
@@ -6431,7 +6430,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title fw-bold"><i class="fas fa-unlock-alt me-2"></i>Solicitar Recuperación</h5>
+            <h5 class="modal-title fw-bold"><i class="fas fa-unlock-alt me-2"></i>Recuperar Póliza</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -6448,10 +6447,21 @@
               <strong>Instrucción:</strong> Indique al cliente que debe adquirir una póliza nueva.
             </div>
 
+            <div id="recuperacionDirecta" class="hidden">
+              <div class="alert alert-success">
+                <strong><i class="fas fa-check-circle"></i> Recuperación Directa</strong><br>
+                La póliza venció hace <span id="diasVencidaDirecta"></span> días.<br>
+                Puede recuperarla directamente y asignarla a su bandeja.
+              </div>
+              <label class="form-label">Observación de recuperación:</label>
+              <textarea class="form-control" id="obsRecuperacionDirecta" rows="2"
+                placeholder="Ej: Cliente contactó para retomar renovación..."></textarea>
+            </div>
+
             <div id="permisoRecuperacion" class="hidden">
               <div class="alert alert-info">
                 <strong><i class="fas fa-info-circle"></i> Requiere Aprobación</strong><br>
-                La póliza venció hace <span id="diasVencidaPermitido"></span> días.<br>
+                La póliza venció hace <span id="diasVencidaPermitido"></span> días (más de 60).<br>
                 Debe solicitar autorización al coordinador para renovarla.
               </div>
               <label class="form-label">Observación para el coordinador:</label>
@@ -6461,6 +6471,9 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn btn-success hidden" id="btnRecuperarDirecto">
+              <i class="fas fa-undo me-2"></i>Recuperar Póliza
+            </button>
             <button type="button" class="btn btn-warning hidden" id="btnEnviarSolicitudRecup">
               <i class="fas fa-paper-plane me-2"></i>Solicitar Aprobación
             </button>

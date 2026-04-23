@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   console.log('Script loaded');
   let currentEtapaIndex = 0;
   let table;
@@ -20,6 +20,8 @@
   let estadoSarlaft = null;
   let otpEnviado = false;
   let codigoOTPGenerado = null;
+  let otpMetodoEnviado = '';
+  let otpIdentificadorEnviado = '';
   let datosRenovacion = {};
   let dataSetRecuperacion = [];
   let tableRecuperacion = null;
@@ -2721,6 +2723,42 @@
       });
     });
 
+    $(document).on('click', '#btnRecuperarDirecto', function () {
+      if (!leadRecuperacionActual) return;
+
+      var btn = $(this);
+      var observacion = $('#obsRecuperacionDirecta').val().trim();
+
+      showWarningAlert('¿Desea recuperar esta póliza y asignarla a su bandeja de gestión?', function (confirmed) {
+        if (!confirmed) return;
+
+        btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Recuperando...');
+
+        google.script.run
+          .withSuccessHandler(function (response) {
+            btn.prop('disabled', false).html('<i class="fas fa-undo me-2"></i>Recuperar Póliza');
+            if (response.status === 'success') {
+              $('#modalRecuperarPoliza').modal('hide');
+              Swal.fire({
+                title: 'Póliza Recuperada',
+                text: 'La póliza ha sido asignada a su bandeja con estado "Recuperado".',
+                icon: 'success',
+                confirmButtonText: 'Aceptar'
+              }).then(function () {
+                reloadDataTable();
+              });
+            } else {
+              Swal.fire('Error', response.message || 'No se pudo recuperar la póliza.', 'error');
+            }
+          })
+          .withFailureHandler(function (error) {
+            btn.prop('disabled', false).html('<i class="fas fa-undo me-2"></i>Recuperar Póliza');
+            Swal.fire('Error', error.message, 'error');
+          })
+          .recuperarPoliza(leadRecuperacionActual.poliza, observacion);
+      });
+    });
+
     $(document).on('click', '#btnEnviarSolicitudRecup', function () {
       if (!leadRecuperacionActual) return;
 
@@ -2728,19 +2766,20 @@
       btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Enviando...');
 
       const dataPayload = {
-        asesor: $('#UserName').text(), // Nombre del asesor logueado
+        asesor: $('#UserName').text(),
         cliente: leadRecuperacionActual.asegurado,
         poliza: leadRecuperacionActual.poliza,
         vencimiento: leadRecuperacionActual.vencimiento,
         diasVencida: $('#diasVencidaPermitido').text(),
-        solicitud: leadRecuperacionActual.solicitud // ID único
+        solicitud: leadRecuperacionActual.solicitud,
+        observacion: $('#obsRecuperacion').val().trim()
       };
 
       google.script.run
         .withSuccessHandler(function (res) {
           btn.prop('disabled', false).html('<i class="fas fa-paper-plane me-2"></i>Solicitar Aprobación');
           $('#modalRecuperarPoliza').modal('hide');
-          Swal.fire('Solicitud Enviada', 'El coordinador ha recibido el correo para aprobar.', 'success');
+          Swal.fire('Solicitud Enviada', 'El coordinador ha recibido el correo para aprobar la recuperación.', 'success');
         })
         .withFailureHandler(function (err) {
           btn.prop('disabled', false).text('Reintentar');
@@ -3199,7 +3238,7 @@
 
       const solicitud = $("#LeadInfoSolicitud").text();
       if (!solicitud) {
-        alert("Error: No se pudo obtener el ID de la Solicitud. Por favor, asegúrese de que el campo 'LeadInfoSolicitud' esté presente y contenga el ID.");
+        showErrorAlert("Error: No se pudo obtener el ID de la Solicitud. Por favor, asegúrese de que el campo 'LeadInfoSolicitud' esté presente y contenga el ID.");
         return;
       }
 
@@ -3992,7 +4031,7 @@
       currentEtapaIndex++;
       renderEtapas(etapaNombres[currentEtapaIndex]);
     } else {
-      alert("Ya estás en la última etapa.");
+      showWarningAlertbasic("Ya estás en la última etapa.");
     }
   }
 
@@ -4001,11 +4040,26 @@
       currentEtapaIndex--;
       renderEtapas(etapaNombres[currentEtapaIndex]);
     } else {
-      alert("Ya estás en la primera etapa.");
+      showWarningAlertbasic("Ya estás en la primera etapa.");
     }
   }
 
-  function reloadDataTable() {
+  function reloadDataTable(fullReload) {
+    if (fullReload === false && table && currentLeadData) {
+      // Recarga parcial: solo actualizar la fila del lead actual sin recargar todo
+      var leadSolicitud = currentLeadData.leadData ? currentLeadData.leadData.solicitud : null;
+      if (leadSolicitud) {
+        table.rows().every(function () {
+          var rowData = this.data();
+          if (rowData && rowData.leadData && rowData.leadData.solicitud === leadSolicitud) {
+            this.remove();
+            return false;
+          }
+        });
+        table.draw();
+        return;
+      }
+    }
     showLoadingSpinner('Cargando información de gestión...');
     google.script.run
       .withSuccessHandler(function (response) {
@@ -4339,17 +4393,29 @@
     $('#recupNombreCliente').text(leadData.asegurado);
     $('#recupPoliza').text(leadData.poliza);
 
-    // REGLA: 6 MESES (aprox 180 días)
+    // Reset todas las secciones
+    $('#bloqueoVencimiento').addClass('hidden');
+    $('#recuperacionDirecta').addClass('hidden');
+    $('#permisoRecuperacion').addClass('hidden');
+    $('#btnRecuperarDirecto').addClass('hidden');
+    $('#btnEnviarSolicitudRecup').addClass('hidden');
+    $('#obsRecuperacionDirecta').val('');
+    $('#obsRecuperacion').val('');
+
     if (diasVencidos > 180) {
+      // Más de 6 meses: NO recuperable
       $('#bloqueoVencimiento').removeClass('hidden');
-      $('#permisoRecuperacion').addClass('hidden');
-      $('#btnEnviarSolicitudRecup').addClass('hidden');
       $('#diasVencida').text(diasVencidos);
-    } else {
-      $('#bloqueoVencimiento').addClass('hidden');
+    } else if (diasVencidos > 60) {
+      // Entre 61 y 180 días: requiere aprobación del coordinador
       $('#permisoRecuperacion').removeClass('hidden');
       $('#btnEnviarSolicitudRecup').removeClass('hidden');
       $('#diasVencidaPermitido').text(diasVencidos);
+    } else {
+      // 60 días o menos: recuperación directa
+      $('#recuperacionDirecta').removeClass('hidden');
+      $('#btnRecuperarDirecto').removeClass('hidden');
+      $('#diasVencidaDirecta').text(diasVencidos);
     }
 
     $('#modalRecuperarPoliza').modal('show');
@@ -4609,27 +4675,22 @@
     });
     $('#reiterarCoberturasIndModal select[name="continuarInd"]').on('change', function () {
       if ($(this).val() === 'No') {
-        const confirmClose = confirm("¿Está seguro de que desea desistir la gestión para este lead?");
-        if (confirmClose) {
-
-          $('#reiterarCoberturasIndModal').modal('hide');
-          $('#modalGestionLead').modal('hide');
-        }
+        showWarningAlert("¿Está seguro de que desea desistir la gestión para este lead?", function(confirmed) {
+          if (confirmed) {
+            $('#reiterarCoberturasIndModal').modal('hide');
+            $('#modalGestionLead').modal('hide');
+          }
+        });
       }
     });
     $('#frecuenciaDeporte').on('change', function () {
       const selectedValue = $(this).val();
       if (selectedValue === '6') {
-        alert("Importante: La práctica frecuente de deportes extremos puede afectar la asegurabilidad. La solicitud podría requerir evaluación adicional.");
-      }
-    });
-    $('#frecuenciaDeporte').on('change', function () {
-      const selectedValue = $(this).val();
-      if (selectedValue === '6') {
-        const confirmAlerta = confirm("Ha indicado que practica deportes de alto riesgo más de 5 veces al año. ¿Desea continuar?");
-        if (!confirmAlerta) {
-          $(this).val('');
-        }
+        showWarningAlert("La práctica frecuente de deportes extremos puede afectar la asegurabilidad. La solicitud podría requerir evaluación adicional. ¿Desea continuar?", function(confirmed) {
+          if (!confirmed) {
+            $('#frecuenciaDeporte').val('');
+          }
+        });
       }
     });
     $('.wrapper').addClass('sidebar_minimize');
@@ -4714,6 +4775,10 @@
         $("#page_not_found").show();
 
       }
+    }).withFailureHandler(function (error) {
+      completeLoading();
+      console.error("Error al cargar datos iniciales:", error);
+      Swal.fire('Error de Conexión', 'No se pudieron cargar los datos del asesor: ' + error.message, 'error');
     }).getDatauserPro()
 
 
@@ -5350,13 +5415,13 @@ function filtrarDatosYRecalcularKPIs() {
         };
         google.script.run
           .withSuccessHandler(function (response) {
-            alert('Lead añadido con éxito: ' + response);
+            showSuccessAlert('Lead añadido con éxito: ' + response);
             $('#modalAñadirLead').modal('hide');
             form[0].reset();
             reloadDataTable();
           })
           .withFailureHandler(function (error) {
-            alert('Error al añadir lead: ' + error.message);
+            showErrorAlert('Error al añadir lead: ' + error.message);
           })
           .addNewLead(newLeadData);
       } else {
@@ -5461,7 +5526,7 @@ function filtrarDatosYRecalcularKPIs() {
 
   function forzarRenovacionSarlaft() {
     $('#sarlaft-validacion-fecha').addClass('hidden');
-    $('##sarlaft-pregunta-inicial').removeClass('hidden').addClass('fade-in-up');
+    $('#sarlaft-pregunta-inicial').removeClass('hidden').addClass('fade-in-up');
     actualizarEstadoGestion('Redirigiendo a carga de nuevo documento', 'warning');
   }
 
@@ -5713,24 +5778,32 @@ function filtrarDatosYRecalcularKPIs() {
       }
     });
 
-    // Simular envío (reemplazar con google.script.run)
-    setTimeout(() => {
-      Swal.fire({
-        title: '✓ Link Enviado',
-        html: `El cliente ha recibido el link de actualización por <strong>${metodo === 'ambos' ? 'SMS y Email' : metodo.toUpperCase()}</strong>`,
-        icon: 'success',
-        confirmButtonText: 'Entendido'
-      }).then(() => {
-        // Marcar en observaciones
-        const textoActual = $('#db_CONVERSACION_RENOVACION').val();
-        $('#db_CONVERSACION_RENOVACION').val(
-          textoActual + `\n[${new Date().toLocaleString()}] Link de actualización SARLAFT enviado por ${metodo}.`
-        );
-      });
-    }, 2000);
+    let telefonoInput = $('#propietarioTelefono').val();
+    let emailInput = $('#propietarioEmail').val();
+    let nombre = $('#db_ASEGURADO').text().trim();
 
-    // En producción:
-    // google.script.run.withSuccessHandler(...).enviarLinkActualizacionSarlaft(clienteId, metodo);
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (response.success) {
+          Swal.fire({
+            title: '✓ Link Enviado',
+            html: `El cliente ha recibido el link de actualización por <strong>${metodo === 'ambos' ? 'SMS y Email' : metodo.toUpperCase()}</strong>`,
+            icon: 'success',
+            confirmButtonText: 'Entendido'
+          }).then(() => {
+            const textoActual = $('#db_CONVERSACION_RENOVACION').val();
+            $('#db_CONVERSACION_RENOVACION').val(
+              textoActual + `\n[${new Date().toLocaleString()}] Link de actualización SARLAFT enviado por ${metodo}.`
+            );
+          });
+        } else {
+          Swal.fire('Error', 'No se pudo enviar el link de actualización. Intente nuevamente.', 'error');
+        }
+      })
+      .withFailureHandler(function (error) {
+        Swal.fire('Error de Conexión', 'Ocurrió un error: ' + error.message, 'error');
+      })
+      .sendWhatsAppSarlaft(telefonoInput, nombre);
   }
 
   function seleccionarPoliza(tipo, elemento) {
@@ -6407,6 +6480,8 @@ function calcularCotizacion() {
     estadoSarlaft = null;
     otpEnviado = false;
     codigoOTPGenerado = null;
+    otpMetodoEnviado = '';
+    otpIdentificadorEnviado = '';
     procesoEspecialSeleccionado = null;
     archivosSubidos = {};
 
@@ -6606,56 +6681,127 @@ function calcularCotizacion() {
   //   }, 2000);
   // }
 
-  function enviarOTP(metodo) {
-    let telefonoInput = $('#propietarioTelefono').val();
-    if (!telefonoInput) {
-      Swal.fire('Error', 'No se encontró un número de celular para enviar el OTP.', 'warning');
-      return;
+  function obtenerDestinatarioOTP() {
+    var segmento = '';
+    if (currentLeadData && currentLeadData.leadData) {
+      segmento = (currentLeadData.leadData.segmento || currentLeadData.leadData.Segmento || 'PROPIETARIO').toString().toUpperCase();
     }
-    let telefonoLimpio = telefonoInput.replace(/\D/g, '');
-    if (!telefonoLimpio.startsWith('57')) {
-      telefonoLimpio = '57' + telefonoLimpio;
+    var telefono = '';
+    var email   = '';
+    var nombre  = '';
+    if (segmento.includes('BROKER') || segmento.includes('INMOBILIARIA')) {
+      telefono = (currentLeadData.leadData.numBrIn    || '').toString().trim();
+      email    = (currentLeadData.leadData.emailBrIn  || currentLeadData.leadData.EmailBrIn  || '').toString().trim();
+      nombre   = (currentLeadData.leadData.nombreBrIn || currentLeadData.leadData.NombreBrIn || '').toString().trim();
+    } else {
+      telefono = ($('#propietarioTelefono').val() || '').trim();
+      email    = ($('#propietarioEmail').val()    || '').trim();
+      nombre   = ($('#db_ASEGURADO').text()       || '').trim();
     }
-
-    codigoOTPGenerado = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('Código OTP generado:', codigoOTPGenerado);
-
-    Swal.fire({
-      title: 'Enviando código...',
-      html: 'Conectando con WhatsApp...',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
-
-    google.script.run
-      .withSuccessHandler(function (response) {
-        if (response.success) {
-          otpEnviado = true;
-          $('#envioOTP').addClass('hidden');
-          $('#validacionOTP').removeClass('hidden');
-          setTimeout(() => $('#otp1').focus(), 500);
-          Swal.fire({
-            title: '✓ Código Enviado',
-            html: `Se ha enviado el código al número <strong>${telefonoInput}</strong> por WhatsApp.`,
-            icon: 'success',
-            confirmButtonText: 'Entendido'
-          });
-
-          actualizarEstadoGestion('Código OTP enviado por WhatsApp - Esperando validación');
-
-        } else {
-          console.error("Error API:", response);
-          Swal.fire('Error', 'No se pudo enviar el mensaje de WhatsApp. Intente nuevamente.', 'error');
-        }
-      })
-      .withFailureHandler(function (error) {
-        console.error("Error Servidor:", error);
-        Swal.fire('Error de Conexión', 'Ocurrió un error al conectar con el servidor.', 'error');
-      })
-      .enviarOtpWhatsapp(telefonoLimpio, codigoOTPGenerado);
+    return { telefono: telefono, email: email, nombre: nombre, segmento: segmento };
   }
+
+  // ── ENVIAR OTP ─────────────────────────────────────────────────────────────
+
+  function enviarOTP(metodo) {
+    var dest        = obtenerDestinatarioOTP();
+    var esBrokerInm = dest.segmento.includes('BROKER') || dest.segmento.includes('INMOBILIARIA');
+
+    // ── Rama WhatsApp ──────────────────────────────────────────────────────
+    if (metodo === 'WhatsApp' || metodo === 'whatsapp') {
+
+      if (!dest.telefono) {
+        Swal.fire('Error',
+          esBrokerInm ? 'No se encontro telefono del ' + dest.segmento + '.'
+                      : 'No se encontro un numero de celular para enviar el OTP.',
+          'warning');
+        return;
+      }
+
+      var telefonoLimpio = dest.telefono.replace(/\D/g, '');
+      if (!telefonoLimpio.startsWith('57')) telefonoLimpio = '57' + telefonoLimpio;
+
+      Swal.fire({
+        title: 'Enviando codigo...',
+        html: 'Conectando con WhatsApp...',
+        allowOutsideClick: false,
+        didOpen: function() { Swal.showLoading(); }
+      });
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (response.success) {
+            otpEnviado            = true;
+            otpMetodoEnviado      = 'WhatsApp';
+            otpIdentificadorEnviado = telefonoLimpio;
+            $('#envioOTP').addClass('hidden');
+            $('#validacionOTP').removeClass('hidden');
+            setTimeout(function() { $('#otp1').focus(); }, 500);
+            var label = esBrokerInm ? dest.nombre + ' (' + dest.telefono + ')' : dest.telefono;
+            Swal.fire({
+              title: 'Codigo Enviado',
+              html: 'Codigo enviado por WhatsApp a <strong>' + label + '</strong>.',
+              icon: 'success',
+              confirmButtonText: 'Entendido'
+            });
+            actualizarEstadoGestion('OTP enviado por WhatsApp a ' + label);
+          } else {
+            Swal.fire('Error', 'No se pudo enviar el mensaje de WhatsApp. Intente nuevamente.', 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
+        })
+        .enviarOtpWhatsapp(telefonoLimpio);
+
+    // ── Rama Email ─────────────────────────────────────────────────────────
+    } else if (metodo === 'email' || metodo === 'Email') {
+
+      if (!dest.email) {
+        Swal.fire('Error',
+          esBrokerInm ? 'No se encontro correo del ' + dest.segmento + '.'
+                      : 'No se encontro un correo electronico para enviar el OTP.',
+          'warning');
+        return;
+      }
+
+      Swal.fire({
+        title: 'Enviando codigo...',
+        html: 'Enviando correo electronico...',
+        allowOutsideClick: false,
+        didOpen: function() { Swal.showLoading(); }
+      });
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (response.success) {
+            otpEnviado            = true;
+            otpMetodoEnviado      = 'email';
+            otpIdentificadorEnviado = dest.email;
+            $('#envioOTP').addClass('hidden');
+            $('#validacionOTP').removeClass('hidden');
+            setTimeout(function() { $('#otp1').focus(); }, 500);
+            var label = esBrokerInm ? dest.nombre + ' (' + dest.email + ')' : dest.email;
+            Swal.fire({
+              title: 'Codigo Enviado',
+              html: 'Codigo enviado por Email a <strong>' + label + '</strong>.',
+              icon: 'success',
+              confirmButtonText: 'Entendido'
+            });
+            actualizarEstadoGestion('OTP enviado por Email a ' + label);
+          } else {
+            Swal.fire('Error', response.error || 'No se pudo enviar el correo.', 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
+        })
+        .enviarOtpEmail(dest.email);
+
+    }
+  }
+
+  // ── MOVER FOCO ENTRE INPUTS OTP ────────────────────────────────────────────
 
   function moveToNext(current, nextId) {
     if (current.value.length === 1) {
@@ -6663,12 +6809,20 @@ function calcularCotizacion() {
     }
   }
 
+  // ── VALIDAR OTP ────────────────────────────────────────────────────────────
+
   function validarOTP() {
-    const otp = $('#otp1').val() + $('#otp2').val() + $('#otp3').val() +
-      $('#otp4').val() + $('#otp5').val() + $('#otp6').val();
+    var otp = $('#otp1').val() + $('#otp2').val() + $('#otp3').val() +
+              $('#otp4').val() + $('#otp5').val() + $('#otp6').val();
 
     if (otp.length !== 6) {
-      Swal.fire('Error', 'Ingrese el código completo de 6 dígitos', 'warning');
+      Swal.fire('Error', 'Ingrese el codigo completo de 6 digitos', 'warning');
+      return;
+    }
+
+    var identificador = otpIdentificadorEnviado;
+    if (!identificador) {
+      Swal.fire('Error', 'No se ha enviado un codigo OTP. Por favor envie el codigo primero.', 'warning');
       return;
     }
 
@@ -6676,101 +6830,159 @@ function calcularCotizacion() {
       title: 'Validando...',
       html: 'Por favor espere',
       allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
+      didOpen: function() { Swal.showLoading(); }
     });
 
-    // Validar código
-    setTimeout(() => {
-      if (otp === codigoOTPGenerado) {
-        $('#validacionOTP').addClass('hidden');
-        $('#confirmacionExitosa').removeClass('hidden');
-        $('#check-otp').prop('checked', true);
-        $('#db_VALIDACION_RENOVACION').val('OTP_VALIDADO');
-        $('#db_VALIDACION_CONTACTO_FINAL').val('OK');
-
-        Swal.fire({
-          title: '✓ Validación Exitosa',
-          text: 'El cliente ha confirmado la renovación',
-          icon: 'success',
-          confirmButtonText: 'Continuar'
-        });
-
-        actualizarEstadoGestion('OTP validado - Listo para guardar', 'success');
-      } else {
-        Swal.fire({
-          title: 'Código Incorrecto',
-          text: 'El código ingresado no es válido',
-          icon: 'error',
-          confirmButtonText: 'Reintentar'
-        });
-        // Limpiar inputs
-        $('#otp1, #otp2, #otp3, #otp4, #otp5, #otp6').val('');
-        $('#otp1').focus();
-      }
-    }, 1500);
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if (response.valid) {
+          $('#validacionOTP').addClass('hidden');
+          $('#confirmacionExitosa').removeClass('hidden');
+          $('#check-otp').prop('checked', true);
+          $('#db_VALIDACION_RENOVACION').val('OTP_VALIDADO');
+          $('#db_VALIDACION_CONTACTO_FINAL').val('OK');
+          Swal.fire({
+            title: 'Validacion Exitosa',
+            text: 'El cliente ha confirmado la renovacion',
+            icon: 'success',
+            confirmButtonText: 'Continuar'
+          });
+          actualizarEstadoGestion('OTP validado - Listo para guardar', 'success');
+        } else {
+          Swal.fire({
+            title: 'Codigo Incorrecto',
+            text: response.error || 'El codigo ingresado no es valido',
+            icon: 'error',
+            confirmButtonText: 'Reintentar'
+          });
+          $('#otp1, #otp2, #otp3, #otp4, #otp5, #otp6').val('');
+          $('#otp1').focus();
+        }
+      })
+      .withFailureHandler(function(error) {
+        Swal.fire('Error de Conexion', 'No se pudo validar el codigo: ' + (error.message || error), 'error');
+      })
+      .validarOtpBackend(identificador, otp);
   }
 
+  // ── REENVIAR OTP ───────────────────────────────────────────────────────────
+
   function reenviarOTP() {
+    if (!otpMetodoEnviado) {
+      Swal.fire('Error', 'No se ha enviado un codigo previo. Por favor envie el codigo primero.', 'warning');
+      return;
+    }
+
     Swal.fire({
-      title: '¿Reenviar código?',
-      text: 'Se enviará nuevamente el mismo código al cliente.',
+      title: 'Reenviar codigo?',
+      text: 'Se enviara nuevamente el codigo por ' + otpMetodoEnviado + '.',
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Sí, reenviar',
+      confirmButtonText: 'Si, reenviar',
       cancelButtonText: 'Cancelar'
-    }).then((result) => {
-
+    }).then(function(result) {
       if (!result.isConfirmed) return;
 
-      // Limpiar inputs
       $('#otp1, #otp2, #otp3, #otp4, #otp5, #otp6').val('');
       $('#otp1').focus();
 
-      let telefonoInput = $('#propietarioTelefono').val();
-      if (!telefonoInput) {
-        Swal.fire('Error', 'No se encontró un número de teléfono.', 'warning');
-        return;
+      var dest        = obtenerDestinatarioOTP();
+      var esBrokerInm = dest.segmento.includes('BROKER') || dest.segmento.includes('INMOBILIARIA');
+
+      // ── Reenvío por WhatsApp ─────────────────────────────────────────────
+      if (otpMetodoEnviado === 'WhatsApp') {
+
+        if (!dest.telefono) {
+          Swal.fire('Error', 'No se encontro un numero de telefono para reenviar.', 'warning');
+          return;
+        }
+
+        var telefonoLimpio = dest.telefono.replace(/\D/g, '');
+        if (!telefonoLimpio.startsWith('57')) telefonoLimpio = '57' + telefonoLimpio;
+
+        Swal.fire({
+          title: 'Reenviando...',
+          html: 'Conectando con WhatsApp...',
+          allowOutsideClick: false,
+          didOpen: function() { Swal.showLoading(); }
+        });
+
+        google.script.run
+          .withSuccessHandler(function(response) {
+            if (response.success) {
+              otpIdentificadorEnviado = telefonoLimpio;
+              var label = esBrokerInm ? dest.nombre + ' (' + dest.telefono + ')' : dest.telefono;
+              Swal.fire({
+                title: 'Codigo reenviado',
+                html: 'Se envio nuevamente a <strong>' + label + '</strong> por WhatsApp.',
+                icon: 'success',
+                confirmButtonText: 'OK'
+              });
+              actualizarEstadoGestion('OTP reenviado por WhatsApp a ' + label);
+            } else {
+              Swal.fire('Error', 'No se pudo reenviar el codigo. Intente de nuevo.', 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
+          })
+          .enviarOtpWhatsapp(telefonoLimpio);
+
+      // ── Reenvío por Email ────────────────────────────────────────────────
+      } else if (otpMetodoEnviado === 'email') {
+
+        if (!dest.email) {
+          Swal.fire('Error', 'No se encontro un correo para reenviar.', 'warning');
+          return;
+        }
+
+        Swal.fire({
+          title: 'Reenviando...',
+          html: 'Enviando correo electronico...',
+          allowOutsideClick: false,
+          didOpen: function() { Swal.showLoading(); }
+        });
+
+        google.script.run
+          .withSuccessHandler(function(response) {
+            if (response.success) {
+              otpIdentificadorEnviado = dest.email;
+              var label = esBrokerInm ? dest.nombre + ' (' + dest.email + ')' : dest.email;
+              Swal.fire({
+                title: 'Codigo reenviado',
+                html: 'Se envio nuevamente a <strong>' + label + '</strong> por Email.',
+                icon: 'success',
+                confirmButtonText: 'OK'
+              });
+              actualizarEstadoGestion('OTP reenviado por Email a ' + label);
+            } else {
+              Swal.fire('Error', response.error || 'No se pudo reenviar el correo. Intente de nuevo.', 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
+          })
+          .enviarOtpEmail(dest.email);
+
       }
-
-      let telefonoLimpio = telefonoInput.replace(/\D/g, '');
-      if (!telefonoLimpio.startsWith('57')) {
-        telefonoLimpio = '57' + telefonoLimpio;
-      }
-
-      Swal.fire({
-        title: 'Reenviando...',
-        html: 'Conectando con WhatsApp...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
-      });
-
-      google.script.run
-        .withSuccessHandler(function (response) {
-          if (response.success) {
-
-            Swal.fire({
-              title: '✓ Código reenviado',
-              html: `Se envió nuevamente al número <strong>${telefonoInput}</strong>.`,
-              icon: 'success',
-              confirmButtonText: 'OK'
-            });
-
-            actualizarEstadoGestion('Código OTP reenviado por WhatsApp');
-
-          } else {
-            Swal.fire('Error', 'No se pudo reenviar el código. Intente de nuevo.', 'error');
-          }
-        })
-        .withFailureHandler(function (error) {
-          console.error("Error Servidor:", error);
-          Swal.fire('Error de conexión', 'Ocurrió un error al conectarse al servidor.', 'error');
-        })
-        .enviarOtpWhatsapp(telefonoLimpio, codigoOTPGenerado); // ← Reenvía el MISMO código
     });
   }
 
+  function subirArchivoADrive(file, prefix) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject('No se proporcionó un archivo.');
+        return;
+      }
+      try {
+        const localUrl = URL.createObjectURL(file);
+        console.log('[subirArchivoADrive] Archivo "' + prefix + '" listo para envío en guardado final: ' + file.name);
+        resolve(localUrl);
+      } catch (error) {
+        reject('Error al procesar el archivo: ' + error.message);
+      }
+    });
+  }
 
   function readFileAsBase64(file) {
     return new Promise((resolve, reject) => {
@@ -7321,6 +7533,8 @@ function marcarNoRenova() {
     estadoSarlaft = null;
     otpEnviado = false;
     codigoOTPGenerado = null;
+    otpMetodoEnviado = '';
+    otpIdentificadorEnviado = '';
     procesoEspecialSeleccionado = null;
     archivosSubidos = {}; // Limpiar memoria de archivos
 

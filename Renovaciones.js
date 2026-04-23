@@ -13,6 +13,19 @@ const GestionAnalista = SpreadsheetApp.openById("1oAfMyBNgkKR97JbUNir7MjM3KFQ2c8
 
 const Espejo = SpreadsheetApp.openById("1ACFjJriwgFE-VOUHifx2Rr7zUNk_Ovy0OnQUMHKnvKY").getSheetByName("new_data_polizas- archivo David")
 
+const EXPEDIDORES = [
+  "jose.castillo.rodriguez@segurosbolivar.com",
+  "jeymmy.aristizabal@segurosbolivar.com"
+];
+
+function obtenerSiguienteExpedidor() {
+  var props = PropertiesService.getScriptProperties();
+  var turno = parseInt(props.getProperty('turnoExpedidor') || '0', 10);
+  var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
+  props.setProperty('turnoExpedidor', String(turno + 1));
+  return expedidor;
+}
+
 
 
  
@@ -64,7 +77,7 @@ function UpdateRenovations() {
         const analistaRow = dbAnalista.get(polizaKey);
         const resultado = processAutogestion(analistaRow);
 
-        row[2] = "STEVEN.VARGAS@SEGUROSBOLIVAR.COM";  
+        row[2] = obtenerSiguienteExpedidor();  
         row[4] = resultado.estado;                     
         row[5] = JSON.stringify(resultado.data);    
         row[6] = JSON.stringify(resultado.data.observaciones);
@@ -374,7 +387,8 @@ function guardarGestionRenovacion(datos, observaciones, archivosBase64) {
     sheet.getRange(targetRowNum, 6).setValue(jsonString);
 
     if (observaciones.estadoGestion === "Caso Especial" || observaciones.estadoGestion === "Enviar a Expedicion") {
-      sheet.getRange(targetRowNum, 3).setValue("STEVEN.VARGAS@SEGUROSBOLIVAR.COM");
+      var asignado = obtenerSiguienteExpedidor();
+      sheet.getRange(targetRowNum, 3).setValue(asignado);
     }
     const cellObs = sheet.getRange(targetRowNum, 7);
     let historial = [];
@@ -537,15 +551,26 @@ function guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urls
 
 
 
-function enviarOtpWhatsapp(telefono, codigoOtp) {
-  const url = "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
+function enviarOtpWhatsapp(telefono) {
+  var authToken = PropertiesService.getScriptProperties().getProperty('infobipAuth');
+  var infobipUrl = PropertiesService.getScriptProperties().getProperty('infobipWhatsappUrl') || "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
 
-  const headers = {
-    "Authorization": "Basic THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=",
+  var codigoOtp = String(Math.floor(100000 + Math.random() * 900000));
+
+  var cache = CacheService.getScriptCache();
+  var otpData = JSON.stringify({
+    code: codigoOtp,
+    attempts: 0,
+    createdAt: new Date().getTime()
+  });
+  cache.put('otp_' + telefono, otpData, 300);
+
+  var headers = {
+    "Authorization": "Basic " + authToken,
     "Content-Type": "application/json"
   };
 
-  const payload = {
+  var payload = {
     "messages": [
       {
         "from": "573144352014",
@@ -569,7 +594,7 @@ function enviarOtpWhatsapp(telefono, codigoOtp) {
     ]
   };
 
-  const options = {
+  var options = {
     "method": "post",
     "headers": headers,
     "payload": JSON.stringify(payload),
@@ -577,22 +602,102 @@ function enviarOtpWhatsapp(telefono, codigoOtp) {
   };
 
   try {
-    const response = UrlFetchApp.fetch(url, options);
-    const responseCode = response.getResponseCode();
-    const responseBody = response.getContentText();
-    const jsonResponse = JSON.parse(responseBody);
-
+    var response = UrlFetchApp.fetch(infobipUrl, options);
+    var responseCode = response.getResponseCode();
     if (responseCode === 200 || responseCode === 201) {
-      Logger.log("Éxito: " + responseBody);
-      return { success: true, data: jsonResponse };
+      Logger.log("OTP WhatsApp enviado a " + telefono);
+      return { success: true, destino: telefono, metodo: "whatsapp" };
     } else {
-      Logger.log("Error (" + responseCode + "): " + responseBody);
-      return { success: false, error: jsonResponse };
+      Logger.log("Error OTP WhatsApp (" + responseCode + "): " + response.getContentText());
+      return { success: false, error: "Error al enviar OTP por WhatsApp" };
     }
-
   } catch (e) {
-    Logger.log("Error de conexión: " + e.toString());
+    Logger.log("Error de conexión OTP WhatsApp: " + e.toString());
     return { success: false, error: e.toString() };
+  }
+}
+
+
+function enviarOtpEmail(email) {
+  var codigoOtp = String(Math.floor(100000 + Math.random() * 900000));
+
+  var cache = CacheService.getScriptCache();
+  var otpData = JSON.stringify({
+    code: codigoOtp,
+    attempts: 0,
+    createdAt: new Date().getTime()
+  });
+  cache.put('otp_email_' + email, otpData, 300);
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: "Código de Verificación - Renovación El Libertador",
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">' +
+        '<div style="text-align:center;padding:20px;background-color:#673ab7;border-radius:8px 8px 0 0;">' +
+        '<h2 style="color:#ffffff;margin:0;">El Libertador</h2>' +
+        '</div>' +
+        '<div style="padding:30px;background-color:#ffffff;border:1px solid #e0e0e0;">' +
+        '<p style="font-size:16px;color:#333;">Su código de verificación para la renovación de póliza es:</p>' +
+        '<div style="text-align:center;margin:25px 0;">' +
+        '<span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#673ab7;background-color:#f3e5f5;padding:15px 30px;border-radius:8px;">' + codigoOtp + '</span>' +
+        '</div>' +
+        '<p style="font-size:14px;color:#666;">Este código expira en <strong>5 minutos</strong>.</p>' +
+        '<p style="font-size:13px;color:#999;">Si usted no solicitó este código, ignore este mensaje.</p>' +
+        '</div>' +
+        '<div style="text-align:center;padding:15px;background-color:#f5f5f5;border-radius:0 0 8px 8px;font-size:11px;color:#999;">' +
+        'Investigaciones y Cobranzas El Libertador S.A.' +
+        '</div></div>'
+    });
+
+    Logger.log("OTP Email enviado a " + email);
+    return { success: true, destino: email, metodo: "email" };
+  } catch (e) {
+    Logger.log("Error enviando OTP por email: " + e.toString());
+    return { success: false, error: "No se pudo enviar el correo: " + e.toString() };
+  }
+}
+
+
+function validarOtpBackend(identificador, codigoIngresado) {
+  var cache = CacheService.getScriptCache();
+
+  // Buscar por teléfono o por email
+  var otpRaw = cache.get('otp_' + identificador) || cache.get('otp_email_' + identificador);
+
+  if (!otpRaw) {
+    return { valid: false, error: "OTP expirado o no generado. Solicite uno nuevo." };
+  }
+
+  var otpData = JSON.parse(otpRaw);
+  var MAX_INTENTOS = 5;
+  var TTL_MS = 300000;
+
+  var ahora = new Date().getTime();
+  if ((ahora - otpData.createdAt) > TTL_MS) {
+    cache.remove('otp_' + identificador);
+    cache.remove('otp_email_' + identificador);
+    return { valid: false, error: "OTP expirado. Solicite uno nuevo." };
+  }
+
+  if (otpData.attempts >= MAX_INTENTOS) {
+    cache.remove('otp_' + identificador);
+    cache.remove('otp_email_' + identificador);
+    return { valid: false, error: "Máximo de intentos alcanzado. Solicite un nuevo código." };
+  }
+
+  otpData.attempts++;
+
+  if (String(codigoIngresado).trim() === String(otpData.code).trim()) {
+    cache.remove('otp_' + identificador);
+    cache.remove('otp_email_' + identificador);
+    Logger.log("OTP validado correctamente para " + identificador + " por " + Session.getActiveUser().getEmail());
+    return { valid: true };
+  } else {
+    // Actualizar intentos en ambas claves posibles
+    var cacheKey = cache.get('otp_' + identificador) ? 'otp_' + identificador : 'otp_email_' + identificador;
+    cache.put(cacheKey, JSON.stringify(otpData), 300);
+    return { valid: false, error: "Código incorrecto. Intento " + otpData.attempts + " de " + MAX_INTENTOS + "." };
   }
 }
 
