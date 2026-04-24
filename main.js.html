@@ -4466,6 +4466,24 @@
         table.clear().rows.add(dataSetRecuperacion).draw();
         table.columns.adjust().draw();
       }
+
+      // 5. KPIs de recuperacion
+      var totalRecuperacion = dataSetRecuperacion.length;
+      var recuperadasKpi = dataSetRecuperacion.filter(function(item) {
+        return (item.estadoGestion || '').toLowerCase() === 'recuperado';
+      }).length;
+      var desistidasKpi = dataSetRecuperacion.filter(function(item) {
+        var est = (item.estadoGestion || '').toLowerCase();
+        return est === 'desistido' || est === 'no interesado' || est === 'no renueva' ||
+               est === 'venta inmueble' || est === 'no justifica motivo' ||
+               est === 'ilocalizado' || est === 'cambio de arrendatario';
+      }).length;
+      var tasaRecuperacion = totalRecuperacion > 0 ? ((recuperadasKpi / totalRecuperacion) * 100).toFixed(1) : '0.0';
+
+      $('#recupKpiTotal').text(totalRecuperacion);
+      $('#recupKpiRecuperadas').text(recuperadasKpi);
+      $('#recupKpiDesistidas').text(desistidasKpi);
+      $('#recupKpiTasa').text(tasaRecuperacion + '%');
     }
   }
 
@@ -5361,24 +5379,22 @@ function filtrarDatosYRecalcularKPIs() {
       } else if (currentUserExpertise === "Renovations" || currentUserExpertise === "CorreccionesBI") {
         // KPIs de Renovaciones
         const totalPolizas = datosRenovaciones.length;
-        const porVencer = datosRenovaciones.filter(item => {
-          // Para renovaciones, usar la fecha de vencimiento
-          if (!item.vencimiento) return false;
-          const fechaVencimiento = new Date(item.vencimiento);
-          const hoy = new Date();
-          const diffTime = fechaVencimiento - hoy;
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          return diffDays <= 30 && diffDays >= 0;
+        const porVencer = datosRenovaciones.filter(function(item) {
+          var vencStr = item.leadData && item.leadData.vencimiento;
+          if (!vencStr) return false;
+          var fechaIso = convertirFechaParaInput(vencStr);
+          if (!fechaIso) return false;
+          var fechaVencimiento = new Date(fechaIso + 'T00:00:00');
+          var hoy = new Date();
+          return fechaVencimiento.getMonth() === hoy.getMonth() && fechaVencimiento.getFullYear() === hoy.getFullYear();
         }).length;
 
-        const renovadas = datosRenovaciones.filter(item =>
-          item.estadoGestion === 'Renovada' ||
-          item.estadoGestion === 'Confirmacion de venta' ||
-          item.estadoGestion === 'RENOVADA' ||
-          item.estadoGestion === 'Renovacion Exitosa'
-        ).length;
+        const renovadas = datosRenovaciones.filter(function(item) {
+          return item.estadoGestion === 'Expedido';
+        }).length;
 
-        const tasaRenovacion = totalPolizas > 0 ? ((renovadas / totalPolizas) * 100).toFixed(1) : '0.0';
+        var totalAsignadas = datosRenovaciones.length + dataSetRecuperacion.length;
+        const tasaRenovacion = totalAsignadas > 0 ? ((renovadas / totalAsignadas) * 100).toFixed(1) : '0.0';
 
         console.log('KPIs Renovaciones calculados - Total:', totalPolizas, 'Por vencer:', porVencer, 'Renovadas:', renovadas, 'Tasa:', tasaRenovacion);
 
@@ -5468,13 +5484,21 @@ function filtrarDatosYRecalcularKPIs() {
     $('#valorDyFActual').text(formatearMoneda(currentLeadData.leadData.valorAsegDyf || 0));
   }
 
-  // PASO 1: VERIFICACIÓN SARLAFT
+  // PASO 1: VERIFICACION SARLAFT
   function seleccionarEstadoSarlaft(opcion) {
     if (opcion === 'SI') {
+      if (!archivosSubidos.sarlaft) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Archivo Requerido',
+          text: 'Debe cargar primero el soporte SARLAFT (PDF o pantallazo) antes de validar la fecha.',
+          confirmButtonColor: '#673ab7'
+        });
+        return;
+      }
       $('#sarlaft-pregunta-inicial').addClass('hidden');
       $('#sarlaft-validacion-fecha').removeClass('hidden').addClass('fade-in-up');
 
-      // Limpieza y preparación
       $('#inputFechaSarlaft').val('');
       $('#resultado-fecha-container').addClass('hidden');
       actualizarEstadoGestion('Documento existente seleccionado. Valide la vigencia.', 'info');
@@ -5555,47 +5579,50 @@ function filtrarDatosYRecalcularKPIs() {
 
 
   function handleSarlaftFileUploadIA(input) {
-    const file = input.files[0];
+    var file = input.files[0];
     if (!file) return;
 
-    if (file.type !== 'application/pdf') {
-      Swal.fire('Formato Incorrecto', 'Solo se permiten archivos PDF.', 'error');
+    var tiposPermitidos = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (tiposPermitidos.indexOf(file.type) === -1) {
+      Swal.fire('Formato Incorrecto', 'Solo se permiten archivos PDF o imagenes (PNG, JPG, WEBP).', 'error');
       input.value = '';
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      Swal.fire('Archivo muy pesado', 'Máximo 10MB permitido.', 'warning');
+      Swal.fire('Archivo muy pesado', 'Maximo 10MB permitido.', 'warning');
       input.value = '';
       return;
     }
 
     $('#sarlaftUploadArea').addClass('hidden');
     $('#ai-validation-container').removeClass('hidden').addClass('fade-in-up');
-    actualizarEstadoGestion('IA analizando documento...', 'info');
+    actualizarEstadoGestion('Procesando documento...', 'info');
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      $('#ai-progress-bar').css('width', progress + '%');
-
-      if (progress < 90) {
-        $('#ai-status-text').text('Validando estructura y firmas digitales...');
-      }
-
-      if (progress >= 100) {
-        clearInterval(interval);
-
-        archivosSubidos.sarlaft = file;
-
-        $('#sarlaft-pregunta-inicial').addClass('hidden');
-
-        $('#sarlaft-validacion-fecha').removeClass('hidden').addClass('fade-in-up');
-
-        actualizarEstadoGestion('Archivo cargado correctamente. Por favor indique la fecha de expedición.', 'warning');
-
-        $('#inputFechaSarlaft').focus();
-      }
-    }, 40);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var base64Data = e.target.result.split(',')[1];
+      var progress = 0;
+      var interval = setInterval(function() {
+        progress += 5;
+        $('#ai-progress-bar').css('width', progress + '%');
+        if (progress < 90) {
+          $('#ai-status-text').text('Validando documento...');
+        }
+        if (progress >= 100) {
+          clearInterval(interval);
+          archivosSubidos.sarlaft = {
+            name: file.name,
+            mimeType: file.type,
+            data: base64Data
+          };
+          $('#sarlaft-pregunta-inicial').addClass('hidden');
+          $('#sarlaft-validacion-fecha').removeClass('hidden').addClass('fade-in-up');
+          actualizarEstadoGestion('Archivo cargado correctamente. Por favor indique la fecha de expedicion.', 'warning');
+          $('#inputFechaSarlaft').focus();
+        }
+      }, 40);
+    };
+    reader.readAsDataURL(file);
   }
 
 

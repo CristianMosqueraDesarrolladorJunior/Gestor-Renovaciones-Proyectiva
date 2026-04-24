@@ -1123,18 +1123,40 @@ function getDatauserPro() {
       };
     });
 
-    dataRecuperacion = dataSetPlano.filter(row => row[2] && row[2].toString().trim().toLowerCase() === correoActivo.trim().toLowerCase() && (row[4] !== "caso especial" && row[4] !== "enviar a expedicion") && row[4].toString().trim().toLowerCase() !== "recuperado").map(row => {
-      let leadData = parseLeadData(row[1]);
+    var estadosTerminalesRecuperacion = new Set([
+      "expedido", "desistido", "cliente ya renovo", "no interesado",
+      "desocupación", "venta inmueble", "no justifica motivo",
+      "cambio de arrendatario", "póliza revocada", "ilocalizado",
+      "no renueva", "vencido", "cambio de compañía", "autogestionado",
+      "caso revisado"
+    ]);
+
+    dataRecuperacion = dataSetPlano.filter(function(row) {
+      var estado = (row[4] || "").toString().trim().toLowerCase();
+      return estadosTerminalesRecuperacion.has(estado);
+    }).map(function(row) {
+      var leadData = parseLeadData(row[1]);
+      if (!leadData || !leadData.poliza) return null;
+
+      var historialGestiones = [];
+      try {
+        var rawHist = (row[6] || "").toString().trim().replace(/:\s*NaN\b/g, ': null');
+        if (rawHist && rawHist !== "") {
+          if (rawHist.startsWith(")]}',")) rawHist = rawHist.substring(5);
+          var parsed = JSON.parse(rawHist);
+          historialGestiones = Array.isArray(parsed) ? parsed : [parsed];
+        }
+      } catch (e) { historialGestiones = []; }
+
       return {
         fechaIngreso: row[0],
         leadData: leadData,
         nombreAgente: row[2],
         etapaFunel: row[3],
         estadoGestion: row[4],
+        historialGestiones: historialGestiones
       };
-    });
-
-    console.log(dataRecuperacion)
+    }).filter(Boolean);
   }
 
 
@@ -1162,6 +1184,62 @@ function parseLeadData(registro) {
   } catch (e) {
     Logger.log("Error parseando registro: " + e.message + " → " + str);
     return {};
+  }
+}
+
+
+function recuperarPoliza(poliza, observacion) {
+  try {
+    var sheet = SpreadsheetApp.openById("1wxqoUCggSYXE0vOUHdgLnwDYfBnlATeyfTZ8CgQQEY4").getSheetByName("JSON");
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { status: "error", message: "Base de datos vacia." };
+
+    var columnBData = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+    var targetRowNum = -1;
+
+    for (var i = 0; i < columnBData.length; i++) {
+      var rawJson = columnBData[i][0].toString().replace(/:\s*NaN\b/g, ': null');
+      try {
+        var json = JSON.parse(rawJson);
+        if (String(json.poliza).trim() === String(poliza).trim()) {
+          targetRowNum = i + 2;
+          break;
+        }
+      } catch (e) { continue; }
+    }
+
+    if (targetRowNum === -1) return { status: "error", message: "Poliza no encontrada." };
+
+    var correoActivo = Session.getActiveUser().getEmail();
+    sheet.getRange(targetRowNum, 5).setValue("Recuperado");
+    sheet.getRange(targetRowNum, 3).setValue(correoActivo);
+
+    var cellObs = sheet.getRange(targetRowNum, 7);
+    var historial = [];
+    try {
+      var rawHist = cellObs.getValue().toString().replace(/:\s*NaN\b/g, ': null');
+      if (rawHist && rawHist.trim() !== "") {
+        if (rawHist.startsWith(")]}',")) rawHist = rawHist.substring(5);
+        var parsed = JSON.parse(rawHist);
+        historial = Array.isArray(parsed) ? parsed : [parsed];
+      }
+    } catch (e) {
+      if (cellObs.getValue()) historial.push({ fecha: "Previo", observacion: cellObs.getValue(), usuario: "Sistema" });
+    }
+
+    var fechaCO = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
+    historial.push({
+      fecha: fechaCO,
+      usuario: correoActivo,
+      observacion: observacion,
+      estado: "Recuperado"
+    });
+    cellObs.setValue(JSON.stringify(historial));
+
+    return { status: "success" };
+  } catch (error) {
+    Logger.log("ERROR recuperarPoliza: " + error.stack);
+    return { status: "error", message: error.message };
   }
 }
 
