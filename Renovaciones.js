@@ -21,9 +21,36 @@ const EXPEDIDORES = [
 function obtenerSiguienteExpedidor() {
   var props = PropertiesService.getScriptProperties();
   var turno = parseInt(props.getProperty('turnoExpedidor') || '0', 10);
-  var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
+
+  // Obtener analistas de renovaciones desde la tabla de gestion
+  var lastRow = DataGestion.getLastRow();
+  if (lastRow < 2) {
+    // Fallback si no hay datos
+    var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
+    props.setProperty('turnoExpedidor', String(turno + 1));
+    return expedidor;
+  }
+
+  var datos = DataGestion.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
+  var analistas = [];
+  for (var i = 0; i < datos.length; i++) {
+    var especialidad = (datos[i][3] || "").toString().trim();
+    var correo = (datos[i][2] || "").toString().trim();
+    if (especialidad === "Analista Renovaciones" && correo !== "") {
+      analistas.push(correo);
+    }
+  }
+
+  if (analistas.length === 0) {
+    // Fallback al array hardcodeado si no hay analistas
+    var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
+    props.setProperty('turnoExpedidor', String(turno + 1));
+    return expedidor;
+  }
+
+  var seleccionado = analistas[turno % analistas.length];
   props.setProperty('turnoExpedidor', String(turno + 1));
-  return expedidor;
+  return seleccionado;
 }
 
 

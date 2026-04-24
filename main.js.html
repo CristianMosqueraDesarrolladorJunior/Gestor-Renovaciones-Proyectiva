@@ -4294,7 +4294,7 @@
         { data: 'leadData.fechaDePago', title: 'Fecha de Pago', visible: false, defaultContent: "" },
         { data: 'leadData.observacionPagos', title: 'Observaciones Pagos', visible: false, defaultContent: "" },
         { data: 'leadData.EmailBrIn', title: 'Correo/Broker Inm.', visible: false, defaultContent: "" },
-        { data: 'leadData.NombreBrIn', title: 'Nombre Broker', visible: true, defaultContent: "PROPIETARIO" },
+        { data: 'leadData.NombreBrIn', title: 'Nombre Broker', visible: false, defaultContent: "PROPIETARIO" },
         { data: 'leadData.IdBrIn', title: 'ID Broker', visible: false, defaultContent: "" },
         { data: 'nombreAgente', title: 'Asesor', visible: false, defaultContent: "" },
         { data: 'etapaFunel', title: 'Segmento', visible: true, defaultContent: "" },
@@ -4345,20 +4345,26 @@
   }
 
   function initializeTableRecuperacion(dataSet) {
+    if ($.fn.DataTable.isDataTable('#tableRecuperacion')) {
+      $('#tableRecuperacion').DataTable().destroy();
+    }
     tableRecuperacion = $("#tableRecuperacion").DataTable({
       data: dataSet,
       columns: [
         {
-          data: 'leadData.vencimiento', title: 'Vencimiento',
-          render: function (data) { return formatearFechaSegura(data); }
+          data: 'leadData.vencimiento', title: 'Vencimiento', defaultContent: '---',
+          render: function (data) { return data ? formatearFechaSegura(data) : '---'; }
         },
-        { data: 'leadData.poliza', title: 'Póliza' },
-        { data: 'leadData.asegurado', title: 'Cliente' },
-        { data: 'leadData.canon', title: 'Canon', render: (data) => formatearMoneda(data) },
+        { data: 'leadData.poliza', title: 'Póliza', defaultContent: '---' },
+        { data: 'leadData.asegurado', title: 'Cliente', defaultContent: '---' },
+        { data: 'estadoGestion', title: 'Estado', defaultContent: '---' },
+        { data: 'leadData.canon', title: 'Canon', defaultContent: '---', render: function(data) { return data ? formatearMoneda(data) : '---'; } },
+        { data: 'nombreAgente', title: 'Asesor', defaultContent: '---' },
         {
           data: null,
-          title: 'Días Vencida',
+          title: 'Días Vencida', defaultContent: '---',
           render: function (data, type, row) {
+            if (!row.leadData || !row.leadData.vencimiento) return '---';
             let dias = calcularDiasVencidos(row.leadData.vencimiento);
             return `<span class="badge bg-danger">${dias} días</span>`;
           }
@@ -4366,15 +4372,18 @@
         {
           data: null,
           title: 'Acción',
-          className: "text-center",
+          className: "text-center", defaultContent: '',
           render: function (data, type, row) {
-            return `<button class="btn btn-sm btn-warning btn-round" onclick='abrirModalRecuperacion(${JSON.stringify(row.leadData)})'>
+            let rowStr = JSON.stringify(row).replace(/'/g, '&#39;');
+            return `<button class="btn btn-sm btn-warning btn-round" onclick='abrirModalRecuperacion(${rowStr})'>
                                 <i class="fas fa-undo"></i> Recuperar
                             </button>`;
           }
         }
       ],
-      language: { /* ... copia tu config de idioma español ... */ }
+      language: { /* ... copia tu config de idioma español ... */ },
+      autoWidth: true,
+      responsive: false
     });
   }
 
@@ -4386,12 +4395,35 @@
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
 
-  function abrirModalRecuperacion(leadData) {
+  function abrirModalRecuperacion(rowDataOrLead) {
+    let leadData = rowDataOrLead.leadData || rowDataOrLead;
     leadRecuperacionActual = leadData;
     const diasVencidos = calcularDiasVencidos(leadData.vencimiento);
 
-    $('#recupNombreCliente').text(leadData.asegurado);
-    $('#recupPoliza').text(leadData.poliza);
+    $('#recupNombreCliente').text(leadData.asegurado || '---');
+    $('#recupPoliza').text(leadData.poliza || '---');
+    $('#recupEstadoActual').text(rowDataOrLead.estadoGestion || '---');
+    $('#recupAsesorAsignado').text(rowDataOrLead.nombreAgente || '---');
+    $('#recupDiasVencida').text(diasVencidos + ' días');
+    $('#recupSegmento').text(leadData.segmento || '---');
+    $('#recupVencimiento').text(leadData.vencimiento || '---');
+
+    let historialHtml = '';
+    let historial = rowDataOrLead.historialGestiones || [];
+    if (historial.length === 0) {
+      historialHtml = '<div class="text-muted text-center py-3"><i class="fas fa-info-circle me-2"></i>Sin historial de gestión registrado</div>';
+    } else {
+      for (let i = 0; i < historial.length; i++) {
+        let entry = historial[i];
+        let estadoBadge = entry.estado ? '<span class="badge bg-secondary ms-2">' + entry.estado + '</span>' : '';
+        historialHtml += '<div class="mb-2 pb-2 border-bottom">' +
+          '<div class="d-flex justify-content-between"><small class="text-muted">' + (entry.fecha || '---') + '</small>' + estadoBadge + '</div>' +
+          '<div class="small text-muted"><i class="fas fa-user me-1"></i>' + (entry.usuario || 'Sistema') + '</div>' +
+          '<div class="small">' + (entry.observacion || '---') + '</div>' +
+          '</div>';
+      }
+    }
+    $('#recupHistorialGestion').html(historialHtml);
 
     // Reset todas las secciones
     $('#bloqueoVencimiento').addClass('hidden');
