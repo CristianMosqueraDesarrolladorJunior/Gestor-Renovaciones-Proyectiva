@@ -4435,16 +4435,9 @@
     $('#obsRecuperacion').val('');
 
     if (diasVencidos > 180) {
-      // Más de 6 meses: NO recuperable
       $('#bloqueoVencimiento').removeClass('hidden');
       $('#diasVencida').text(diasVencidos);
-    } else if (diasVencidos > 60) {
-      // Entre 61 y 180 días: requiere aprobación del coordinador
-      $('#permisoRecuperacion').removeClass('hidden');
-      $('#btnEnviarSolicitudRecup').removeClass('hidden');
-      $('#diasVencidaPermitido').text(diasVencidos);
     } else {
-      // 60 días o menos: recuperación directa
       $('#recuperacionDirecta').removeClass('hidden');
       $('#btnRecuperarDirecto').removeClass('hidden');
       $('#diasVencidaDirecta').text(diasVencidos);
@@ -5147,37 +5140,37 @@ $(document).on("click", "#renovar", function () {
     pintarHistorialObservaciones()
 });
 
-    function recalcularKPIs(data) {
-      // CANDADO DE SEGURIDAD:
-      // Si la vista de recuperación está visible, NO tocamos los KPIs de gestión.
-      // Simplemente salimos de la función.
-      if ($('#vistaRecuperacion').is(':visible')) {
-        $('#kpiVentas').hide();
-        $('#kpiRenovaciones').hide();
-        $('#seccionFiltros').hide();
-        $('.kpi-section-container').hide();
-        return;
-      }
-
-      // Si estamos aquí, es porque estamos en la vista de GESTIÓN
-      $('.kpi-section-container').show();
-      $('#seccionFiltros').show();
-
-      // Lógica normal de asignación de datos a los KPIs...
-      // (Tus asignaciones de texto se mantienen igual, aquí solo controlo visibilidad)
-
-      if (data.expertise === "Seguro de Vida" || data.expertise === "Seguro de Desempleo") {
-        $('#kpiVentas').show();
-        $('#kpiRenovaciones').hide();
-      } else if (data.expertise === "Renovations" || data.expertise === "CorreccionesBI") {
-        $('#kpiVentas').hide();
-        $('#kpiRenovaciones').show();
-      } else {
-        // Si no hay expertise definido, ocultamos ambos por seguridad
-        $('#kpiVentas').hide();
-        $('#kpiRenovaciones').hide();
-      }
+  function recalcularKPIs(data) {
+    // CANDADO DE SEGURIDAD:
+    // Si la vista de recuperación está visible, NO tocamos los KPIs de gestión.
+    // Simplemente salimos de la función.
+    if ($('#vistaRecuperacion').is(':visible')) {
+      $('#kpiVentas').hide();
+      $('#kpiRenovaciones').hide();
+      $('#seccionFiltros').hide();
+      $('.kpi-section-container').hide();
+      return;
     }
+
+    // Si estamos aquí, es porque estamos en la vista de GESTIÓN
+    $('.kpi-section-container').show();
+    $('#seccionFiltros').show();
+
+    // Lógica normal de asignación de datos a los KPIs...
+    // (Tus asignaciones de texto se mantienen igual, aquí solo controlo visibilidad)
+
+    if (data.expertise === "Seguro de Vida" || data.expertise === "Seguro de Desempleo") {
+      $('#kpiVentas').show();
+      $('#kpiRenovaciones').hide();
+    } else if (data.expertise === "Renovations" || data.expertise === "CorreccionesBI") {
+      $('#kpiVentas').hide();
+      $('#kpiRenovaciones').show();
+    } else {
+      // Si no hay expertise definido, ocultamos ambos por seguridad
+      $('#kpiVentas').hide();
+      $('#kpiRenovaciones').hide();
+    }
+  }
 
     function aplicarFiltros() {
       try {
@@ -5930,12 +5923,21 @@ function filtrarDatosYRecalcularKPIs() {
       $('#input_IPC').prop('disabled', false).val(5.1); // IPC Default
       $('.btn-ipc').prop('disabled', false);
       $('#db_NUEVO_CANON_SOLO, #db_NUEVA_ADMINISTRACION, #nuevosServicios, #nuevosDyF, #db_IVACOMERCIAL').prop('disabled', false);
-        if(!$('#fechaFinVigencia').val()){
-             const defaultFin = new Date(fechaInicioObj);
-             defaultFin.setFullYear(defaultFin.getFullYear() + 1);
-             $('#fechaFinVigencia').val(defaultFin.toISOString().split('T')[0]);
-        }
-        
+
+      // Calcular fecha fin con la duración real de la póliza anterior
+      const vigenciaStr = currentLeadData.leadData.vigencia;
+      const vencimientoStr = currentLeadData.leadData.vencimiento;
+      if (vigenciaStr && vencimientoStr) {
+        const dIni = new Date(convertirFechaParaInput(vigenciaStr) + 'T00:00:00');
+        const dFin = new Date(convertirFechaParaInput(vencimientoStr) + 'T00:00:00');
+        const duracion = Math.abs(dFin - dIni);
+        const nuevaFechaFin = new Date(fechaInicioObj.getTime() + duracion);
+        $('#fechaFinVigencia').val(nuevaFechaFin.toISOString().split('T')[0]);
+      } else if (!$('#fechaFinVigencia').val()) {
+        const defaultFin = new Date(fechaInicioObj);
+        defaultFin.setFullYear(defaultFin.getFullYear() + 1);
+        $('#fechaFinVigencia').val(defaultFin.toISOString().split('T')[0]);
+      }
 
       recalcularCanonPorIPC();
       validarYCalcularFechas();
@@ -6018,11 +6020,8 @@ function filtrarDatosYRecalcularKPIs() {
     const fInicio = new Date(inputInicio + 'T00:00:00');
     const fFin = new Date(inputFin + 'T00:00:00');
 
-    // Calcular Meses (Aproximación para canon)
-    let meses = (fFin.getFullYear() - fInicio.getFullYear()) * 12;
-    meses -= fInicio.getMonth();
-    meses += fFin.getMonth();
-    // Ajuste por día
+    // Calcular meses reales entre las dos fechas
+    let meses = (fFin.getFullYear() - fInicio.getFullYear()) * 12 + (fFin.getMonth() - fInicio.getMonth());
     if (fFin.getDate() < fInicio.getDate()) meses--;
 
     // Calcular Días Exactos
@@ -6749,9 +6748,9 @@ function calcularCotizacion() {
     var email   = '';
     var nombre  = '';
     if (segmento.includes('BROKER') || segmento.includes('INMOBILIARIA')) {
-      telefono = (currentLeadData.leadData.numBrIn    || '').toString().trim();
-      email    = (currentLeadData.leadData.emailBrIn  || currentLeadData.leadData.EmailBrIn  || '').toString().trim();
-      nombre   = (currentLeadData.leadData.nombreBrIn || currentLeadData.leadData.NombreBrIn || '').toString().trim();
+      telefono = ($('#br_Tel').text()   || '').trim();
+      email    = ($('#br_Email').text() || '').trim();
+      nombre   = ($('#br_Nombre').text() || '').trim();
     } else {
       telefono = ($('#propietarioTelefono').val() || '').trim();
       email    = ($('#propietarioEmail').val()    || '').trim();
@@ -7346,8 +7345,9 @@ function calcularCotizacion() {
       
       // Si no seleccionó nada en el dropdown y no es proceso especial
       if (!estadoContacto && tipoAccion !== 'PROCESO_ESPECIAL') {
-         // Opcional: Forzar selección o poner por defecto
-         estadoContacto = "En Gestión"; 
+        Swal.fire('Estado Requerido', 'Debe seleccionar el estado del contacto para tipificar la llamada.', 'warning');
+        $('#db_CONTACTO').focus();
+        return;
       }
     }
     
@@ -7356,7 +7356,12 @@ function calcularCotizacion() {
       const promesasArchivos = [];
       const encolarLectura = (file, key) => {
         if (file) {
-          promesasArchivos.push(readFileAsBase64(file).then(data => ({ key, data })));
+          // Si ya viene como objeto base64 {data, mimeType, name}, no releer
+          if (file.data && file.mimeType && file.name) {
+            promesasArchivos.push(Promise.resolve({ key, data: file }));
+          } else {
+            promesasArchivos.push(readFileAsBase64(file).then(data => ({ key, data })));
+          }
         }
       };
       if (tipoAccion !== 'DESISTIMIENTO') {
@@ -7596,6 +7601,11 @@ function marcarNoRenova() {
     otpIdentificadorEnviado = '';
     procesoEspecialSeleccionado = null;
     archivosSubidos = {}; // Limpiar memoria de archivos
+
+    // Limpiar inputs de archivos y previews
+    $('#sarlaftFileInput, #otroSiFileInput, #cesionDocAdicionalInput').val('');
+    $('#otroSiFilePreview, #cesionDocAdicionalPreview, #sarlaftFilePreview').empty();
+    $('input[type="file"]', '#modalGestionRenovaciones').val('');
 
     $('#pazSalvoModalRenova').val('');
     $('#estadoInmuebleRenova').val('');

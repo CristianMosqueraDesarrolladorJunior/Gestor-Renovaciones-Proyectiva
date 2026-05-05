@@ -5906,12 +5906,12 @@
                                   <div class="col-6">
                                     <label class="small text-muted fw-bold">Inicio Nueva Vigencia *</label>
                                     <input type="date" class="form-control form-control-sm border-primary"
-                                      id="fechaInicioVigencia" onchange="validarYCalcularFechas()">
+                                      id="fechaInicioVigencia" onchange="validarYCalcularFechas(); calcularCotizacion();">
                                   </div>
                                   <div class="col-6">
                                     <label class="small text-muted fw-bold">Fin Vigencia (Fija)</label>
                                     <input type="date" class="form-control form-control-sm bg-light fw-bold"
-                                      id="fechaFinVigencia" readonly>
+                                      id="fechaFinVigencia" onchange="validarYCalcularFechas(); calcularCotizacion();" readonly>
                                   </div>
                                 </div>
                                 <div class="d-flex justify-content-between mt-2 small">
@@ -6305,9 +6305,7 @@
                               <option value="Caso Especial">Caso Especial</option>
                               <option value="Volver a Llamar">Volver a Llamar</option>
                               <option value="Cliente ya Renovo">Cliente ya Renovó</option>
-                              <option value="Interesado">Cliente interesado, requiere
-                                seguimiento</option>
-                            </optgroup>
+                             </optgroup>
                             <optgroup label="No Contacto">
                               <option value="No Responde">No responde</option>
                               <option value="Buzon">Contesta buzón de voz</option>

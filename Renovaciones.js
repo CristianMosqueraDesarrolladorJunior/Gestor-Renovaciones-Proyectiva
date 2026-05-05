@@ -13,6 +13,26 @@ const GestionAnalista = SpreadsheetApp.openById("1oAfMyBNgkKR97JbUNir7MjM3KFQ2c8
 
 const Espejo = SpreadsheetApp.openById("1ACFjJriwgFE-VOUHifx2Rr7zUNk_Ovy0OnQUMHKnvKY").getSheetByName("new_data_polizas- archivo David")
 
+/**
+ * Ejecuta una función con reintentos y backoff exponencial para manejar errores intermitentes de Google Drive.
+ * @param {Function} fn - Función a ejecutar.
+ * @param {number} retries - Número máximo de reintentos.
+ * @param {number} delay - Delay inicial en milisegundos.
+ * @return {*} Resultado de la función ejecutada.
+ */
+function retryDrive(fn, retries = 5, delay = 300) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return fn();
+    } catch (e) {
+      Logger.log(`[Drive] Intento ${i + 1} fallido. Error: ${e.message}. Reintentando en ${delay}ms...`);
+      if (i === retries - 1) throw new Error("El servicio de Google Drive no respondió después de " + retries + " intentos. Por favor intente nuevamente en unos minutos. Detalle: " + e.message);
+      Utilities.sleep(delay);
+      delay *= 2;
+    }
+  }
+}
+
 const EXPEDIDORES = [
   "jose.castillo.rodriguez@segurosbolivar.com",
   "jeymmy.aristizabal@segurosbolivar.com"
@@ -455,7 +475,11 @@ function guardarGestionRenovacion(datos, observaciones, archivosBase64) {
 
   } catch (error) {
     Logger.log("ERROR FATAL: " + error.stack);
-    return { status: "error", message: error.message };
+    const esDrive = error.message && error.message.indexOf("Google Drive") !== -1;
+    const mensajeUsuario = esDrive
+      ? "El servicio de Google Drive presentó fallas al guardar los documentos. Por favor intente nuevamente en unos minutos."
+      : error.message;
+    return { status: "error", message: mensajeUsuario };
   }
 }
 
@@ -464,15 +488,15 @@ function guardarGestionRenovacion(datos, observaciones, archivosBase64) {
 
 
 function buscarCarpetaYGuardarArchivos(archivosBase64, datos, ref) {
-  const rootFolder = DriveApp.getFolderById("1e05FPKAfrRnqBbUpOF1JP9ostCg2TsjC");
+  const rootFolder = retryDrive(() => DriveApp.getFolderById("1e05FPKAfrRnqBbUpOF1JP9ostCg2TsjC"));
   const urlsNuevas = {};
 
-  const iteradorCandidatos = rootFolder.searchFolders(`title contains '${ref}' and trashed = false`);
+  const iteradorCandidatos = retryDrive(() => rootFolder.searchFolders(`title contains '${ref}' and trashed = false`));
   let carpetaCliente = null;
 
-  while (iteradorCandidatos.hasNext()) {
-    let candidato = iteradorCandidatos.next();
-    let nombreCarpeta = candidato.getName();
+  while (retryDrive(() => iteradorCandidatos.hasNext())) {
+    let candidato = retryDrive(() => iteradorCandidatos.next());
+    let nombreCarpeta = retryDrive(() => candidato.getName());
 
     if (nombreCarpeta.trim() === String(ref).trim()) {
       carpetaCliente = candidato;
@@ -490,13 +514,13 @@ function buscarCarpetaYGuardarArchivos(archivosBase64, datos, ref) {
     return urlsNuevas;
   }
 
-  console.log("Carpeta encontrada: " + carpetaCliente.getName());
+  console.log("Carpeta encontrada: " + retryDrive(() => carpetaCliente.getName()));
 
   // Crear o buscar carpeta "Renovacion"
   let carpetaRenovacion;
   const nombreRenovacion = "Renovacion";
-  const subCarpetas = carpetaCliente.getFoldersByName(nombreRenovacion);
-  carpetaRenovacion = subCarpetas.hasNext() ? subCarpetas.next() : carpetaCliente.createFolder(nombreRenovacion);
+  const subCarpetas = retryDrive(() => carpetaCliente.getFoldersByName(nombreRenovacion));
+  carpetaRenovacion = retryDrive(() => subCarpetas.hasNext()) ? retryDrive(() => subCarpetas.next()) : retryDrive(() => carpetaCliente.createFolder(nombreRenovacion));
 
   // Guardar archivos principales
   guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urlsNuevas);
@@ -506,17 +530,17 @@ function buscarCarpetaYGuardarArchivos(archivosBase64, datos, ref) {
 
 
 function crearFolderYGuardarArchivos(archivosBase64, datos, referencia) {
-  const rootFolder = DriveApp.getFolderById("1e05FPKAfrRnqBbUpOF1JP9ostCg2TsjC");
+  const rootFolder = retryDrive(() => DriveApp.getFolderById("1e05FPKAfrRnqBbUpOF1JP9ostCg2TsjC"));
   const urlsNuevas = {};
 
   console.log("Creando estructura de carpetas para referencia: " + referencia);
 
   // Crear carpeta principal con el nombre de la referencia
-  const carpetaCliente = rootFolder.createFolder(referencia);
-  console.log("Carpeta cliente creada: " + carpetaCliente.getName());
+  const carpetaCliente = retryDrive(() => rootFolder.createFolder(referencia));
+  console.log("Carpeta cliente creada: " + retryDrive(() => carpetaCliente.getName()));
 
   // Crear subcarpeta "Renovacion"
-  const carpetaRenovacion = carpetaCliente.createFolder("Renovacion");
+  const carpetaRenovacion = retryDrive(() => carpetaCliente.createFolder("Renovacion"));
   console.log("Subcarpeta Renovacion creada");
 
   // Guardar archivos en la carpeta de renovación
@@ -528,20 +552,15 @@ function crearFolderYGuardarArchivos(archivosBase64, datos, referencia) {
 
 function guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urlsNuevas) {
   const guardar = (fileObj, prefix, folder) => {
-    try {
-      const ext = fileObj.name.split('.').pop();
-      const blob = Utilities.newBlob(
-        Utilities.base64Decode(fileObj.data),
-        fileObj.mimeType,
-        `${prefix}_${datos.poliza}.${ext}`
-      );
-      const file = folder.createFile(blob);
-      console.log(`Archivo guardado: ${prefix}_${datos.poliza}.${ext}`);
-      return file.getUrl();
-    } catch (err) {
-      console.error(`Error guardando archivo ${prefix}: ` + err.message);
-      return null;
-    }
+    const ext = fileObj.name.split('.').pop();
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(fileObj.data),
+      fileObj.mimeType,
+      `${prefix}_${datos.poliza}.${ext}`
+    );
+    const file = retryDrive(() => folder.createFile(blob));
+    console.log(`Archivo guardado: ${prefix}_${datos.poliza}.${ext}`);
+    return retryDrive(() => file.getUrl());
   };
 
   // Guardar archivos principales
@@ -555,10 +574,10 @@ function guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urls
   // Guardar archivos de procesos especiales
   if (datos.procesoEspecial && datos.procesoEspecial !== 'NINGUNO') {
     let especialFolder;
-    const subIter = carpetaRenovacion.getFoldersByName("Procesos Especiales");
-    especialFolder = subIter.hasNext() ?
-      subIter.next() :
-      carpetaRenovacion.createFolder("Procesos Especiales");
+    const subIter = retryDrive(() => carpetaRenovacion.getFoldersByName("Procesos Especiales"));
+    especialFolder = retryDrive(() => subIter.hasNext()) ?
+      retryDrive(() => subIter.next()) :
+      retryDrive(() => carpetaRenovacion.createFolder("Procesos Especiales"));
 
     console.log("Guardando archivos de proceso especial: " + datos.procesoEspecial);
 
@@ -579,8 +598,8 @@ function guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urls
 
 
 function enviarOtpWhatsapp(telefono) {
-  var authToken = PropertiesService.getScriptProperties().getProperty('infobipAuth');
-  var infobipUrl = PropertiesService.getScriptProperties().getProperty('infobipWhatsappUrl') || "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
+  var authToken = "THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=";
+  var infobipUrl = "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
 
   var codigoOtp = String(Math.floor(100000 + Math.random() * 900000));
 
