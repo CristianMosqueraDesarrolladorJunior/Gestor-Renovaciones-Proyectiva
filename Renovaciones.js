@@ -38,19 +38,9 @@ const EXPEDIDORES = [
   "jeymmy.aristizabal@segurosbolivar.com"
 ];
 
-function obtenerSiguienteExpedidor() {
-  var props = PropertiesService.getScriptProperties();
-  var turno = parseInt(props.getProperty('turnoExpedidor') || '0', 10);
-
-  // Obtener analistas de renovaciones desde la tabla de gestion
+function cargarListaAnalistas() {
   var lastRow = DataGestion.getLastRow();
-  if (lastRow < 2) {
-    // Fallback si no hay datos
-    var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
-    props.setProperty('turnoExpedidor', String(turno + 1));
-    return expedidor;
-  }
-
+  if (lastRow < 2) return EXPEDIDORES.slice();
   var datos = DataGestion.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
   var analistas = [];
   for (var i = 0; i < datos.length; i++) {
@@ -60,13 +50,16 @@ function obtenerSiguienteExpedidor() {
       analistas.push(correo);
     }
   }
+  return analistas.length > 0 ? analistas : EXPEDIDORES.slice();
+}
 
-  if (analistas.length === 0) {
-    // Fallback al array hardcodeado si no hay analistas
-    var expedidor = EXPEDIDORES[turno % EXPEDIDORES.length];
-    props.setProperty('turnoExpedidor', String(turno + 1));
-    return expedidor;
-  }
+function obtenerSiguienteExpedidor(analistasPreCargados) {
+  var props = PropertiesService.getScriptProperties();
+  var turno = parseInt(props.getProperty('turnoExpedidor') || '0', 10);
+
+  var analistas = (analistasPreCargados && analistasPreCargados.length > 0)
+    ? analistasPreCargados
+    : cargarListaAnalistas();
 
   var seleccionado = analistas[turno % analistas.length];
   props.setProperty('turnoExpedidor', String(turno + 1));
@@ -77,16 +70,15 @@ function obtenerSiguienteExpedidor() {
 
  
 function UpdateRenovations() {
-  const sheet = DataRenovations;  
+  const sheet = DataRenovations;
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const range = sheet.getRange(2, 1, lastRow - 1, 8); // A:H
-  const data = range.getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
 
-  // Primero: identificar pólizas que NO están expedidas en el sheet
+  // Pre-loop único: construir polizasNoExpedidas en un solo recorrido sobre data
   const polizasNoExpedidas = new Set();
   for (let i = 0; i < data.length; i++) {
-    let leadInfo = parseLeadJson(data[i][1]);
+    const leadInfo = parseLeadJson(data[i][1]);
     if (leadInfo && leadInfo.poliza) {
       const estadoFila = (data[i][4] || "").toString().trim().toLowerCase();
       if (estadoFila !== "expedido") {
@@ -95,11 +87,25 @@ function UpdateRenovations() {
     }
   }
 
-  // Cargar bases filtrando solo pólizas no expedidas
-  const dbAnalista = getDatabaseMapFiltered(GestionAnalista, 10, 29);  
-  const dbAsesora = getDatabaseMapByKeys(GestionAsesora, 2, polizasNoExpedidas);    
+  // Leer GestionAnalista una sola vez: se usa para dbAnalista y para el marcado batch al final
+  const lastRowAnalista = GestionAnalista.getLastRow();
+  const dataAnalistaRaw = lastRowAnalista >= 2
+    ? GestionAnalista.getRange(2, 1, lastRowAnalista - 1, GestionAnalista.getLastColumn()).getValues()
+    : [];
+
+  const dbAnalista = new Map();
+  for (const row of dataAnalistaRaw) {
+    const key = String(row[10]).trim();
+    const marca = (row[29] || "").toString().trim();
+    if (key && marca === "") dbAnalista.set(key, row);
+  }
+
+  const dbAsesora = getDatabaseMapByKeys(GestionAsesora, 2, polizasNoExpedidas);
   const dbBroker = getDatabaseMapByKeys(GestionBroker, 2, polizasNoExpedidas);
   const dbCorretaje = getDatabaseMapByKeys(GestionCorretaje, 2, polizasNoExpedidas);
+
+  // Cachear lista de analistas una vez: evita I/O repetido por cada registro dbAnalista
+  const listaAnalistas = cargarListaAnalistas();
 
   const today = new Date();
   const logs = [];
@@ -117,14 +123,28 @@ function UpdateRenovations() {
   let contadorProtegidos = 0;
   let contadorSinPoliza = 0;
 
+  // Set fuera del loop: se construye una sola vez, .has() es O(1)
+  const ESTADOS_PROTEGIDOS = new Set([
+    "expedido",
+    "enviar a expedicion",
+    "poliza renovada",
+    "correccion",
+    "recuperado",
+    "caso especial",
+    "cliente ya renovo",
+    "desistido",
+  ]);
+
+  // Registra exactamente qué pólizas fueron tomadas de dbAnalista para el marcado preciso
+  const polizasProcesadasAnalista = new Set();
+
   for (let i = 0; i < data.length; i++) {
-    let row = data[i];
-    let jsonString = row[1];
-    let leadInfo = parseLeadJson(jsonString);
+    const row = data[i];
+    const leadInfo = parseLeadJson(row[1]);
 
     if (!leadInfo || !leadInfo.poliza) {
       contadorSinPoliza++;
-      continue; 
+      continue;
     }
 
     const polizaKey = String(leadInfo.poliza).trim();
@@ -135,18 +155,7 @@ function UpdateRenovations() {
     const estadoAnterior = row[4].toString().trim();
     const asesorAnterior = row[2].toString().trim();
 
-     const estadosProtegidos = [
-      "expedido",
-      "enviar a expedicion",
-      "poliza renovada",
-      "correccion",
-      "recuperado",
-      "caso especial",
-      "cliente ya renovo",
-      "desistido",
-    ];
-
-    if (estadosProtegidos.includes(estado)) {
+    if (ESTADOS_PROTEGIDOS.has(estado)) {
       contadorProtegidos++;
       continue;
     }
@@ -155,23 +164,19 @@ function UpdateRenovations() {
       const analistaRow = dbAnalista.get(polizaKey);
       const resultado = processAutogestion(analistaRow);
 
-      // dbAnalista siempre actualiza: Expedido o Autogestionado es ABSOLUTO
       row[4] = resultado.estado;
-      row[2] = obtenerSiguienteExpedidor();
+      row[2] = obtenerSiguienteExpedidor(listaAnalistas);
 
-      // Agregar datos de gestión al JSON existente en columna F (no sobrescribir)
       let datosExistentes = {};
       try {
-        let rawF = (row[5] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        const rawF = (row[5] || "").toString().replace(/:\s*NaN\b/g, ': null');
         if (rawF) datosExistentes = JSON.parse(rawF);
       } catch (e) {}
-      const datosMerge = { ...datosExistentes, ...resultado.data };
-      row[5] = JSON.stringify(datosMerge);
+      row[5] = JSON.stringify({ ...datosExistentes, ...resultado.data });
 
-      // Agregar observaciones al JSON existente en columna G
       let historialObs = [];
       try {
-        let rawObs = (row[6] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        const rawObs = (row[6] || "").toString().replace(/:\s*NaN\b/g, ': null');
         if (rawObs) {
           const parsed = JSON.parse(rawObs);
           historialObs = Array.isArray(parsed) ? parsed : [parsed];
@@ -179,31 +184,23 @@ function UpdateRenovations() {
       } catch (e) {
         if (row[6]) historialObs.push({ fecha: "Previo", observacion: row[6].toString(), usuario: "Sistema" });
       }
-
-      const fechaCO = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
-      let nuevaObservacion = {
-        fecha: fechaCO,
+      historialObs.push({
+        fecha: Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss"),
         usuario: "Sistema (UpdateRenovations)",
         estado: resultado.estado,
         obsCliente: resultado.data.observaciones.obsCliente || "",
         observaciones: resultado.data.observaciones.observaciones || "",
         observacionesEjecutivo: resultado.data.observaciones.observacionesEjecutivo || "",
         observacionRenovacion: resultado.data.observaciones.observacionRenovacion || ""
-      };
-      historialObs.push(nuevaObservacion);
+      });
       row[6] = JSON.stringify(historialObs);
 
+      polizasProcesadasAnalista.add(polizaKey);
       contadorActualizados++;
       logs.push([
-        fechaEjecucion,
-        polizaKey,
-        "Analista (Autogestión)",
-        estadoAnterior,
-        resultado.estado,
-        asesorAnterior,
-        row[2],
-        segmento,
-        leadInfo.vencimiento || "",
+        fechaEjecucion, polizaKey, "Analista (Autogestión)",
+        estadoAnterior, resultado.estado, asesorAnterior, row[2],
+        segmento, leadInfo.vencimiento || "",
         resultado.data.NuevaPoliza || "Sin nueva póliza"
       ]);
 
@@ -230,12 +227,11 @@ function UpdateRenovations() {
         const tipificacion = (foundRow[tipificacionIndex] || "").toString().trim();
 
         if (tipificacion !== "") {
-          const estadoNorm = estado.replace(/\s+/g, "").toLowerCase();
           const tipificacionNorm = tipificacion.replace(/\s+/g, "").toLowerCase();
-          const esVolverALlamar = estadoNorm === "volverallamar";
+          const esVolverALlamar = estado.replace(/\s+/g, "").toLowerCase() === "volverallamar";
           // Solo "expedido" puede cambiar "volver a llamar" desde Asesora/Broker/Corretaje.
-          // "autogestionado" solo aplica desde dbAnalista (rama separada, línea 141).
-          const permiteActualizar = (tipificacionNorm === "expedido");
+          // "autogestionado" solo aplica desde dbAnalista (rama separada arriba).
+          const permiteActualizar = tipificacionNorm === "expedido";
 
           if (esVolverALlamar && !permiteActualizar) {
             // Protegido: "volver a llamar" no se toca. No se loguea ni cuenta como actualización.
@@ -243,16 +239,9 @@ function UpdateRenovations() {
             row[4] = tipificacion;
             contadorActualizados++;
             logs.push([
-              fechaEjecucion,
-              polizaKey,
-              fuente + " (Tipificación)",
-              estadoAnterior,
-              row[4].toString().trim(),
-              asesorAnterior,
-              row[2].toString().trim(),
-              segmento,
-              leadInfo.vencimiento || "",
-              "Tipificación: " + tipificacion
+              fechaEjecucion, polizaKey, fuente + " (Tipificación)",
+              estadoAnterior, row[4].toString().trim(), asesorAnterior, row[2].toString().trim(),
+              segmento, leadInfo.vencimiento || "", "Tipificación: " + tipificacion
             ]);
           }
         } else {
@@ -262,15 +251,9 @@ function UpdateRenovations() {
           if (row[4].toString().trim() !== estadoPrevio || row[2].toString().trim() !== asesorPrevio) {
             contadorActualizados++;
             logs.push([
-              fechaEjecucion,
-              polizaKey,
-              fuente + " (Sin tipificación → NoGestion)",
-              estadoPrevio,
-              row[4].toString().trim(),
-              asesorPrevio,
-              row[2].toString().trim(),
-              segmento,
-              leadInfo.vencimiento || "",
+              fechaEjecucion, polizaKey, fuente + " (Sin tipificación → NoGestion)",
+              estadoPrevio, row[4].toString().trim(), asesorPrevio, row[2].toString().trim(),
+              segmento, leadInfo.vencimiento || "",
               esBroker ? "Broker sin tipificación" : "Sin tipificación"
             ]);
           }
@@ -282,15 +265,9 @@ function UpdateRenovations() {
         if (row[4].toString().trim() !== estadoPrevio || row[2].toString().trim() !== asesorPrevio) {
           contadorActualizados++;
           logs.push([
-            fechaEjecucion,
-            polizaKey,
-            "Sin gestión (No encontrada)",
-            estadoPrevio,
-            row[4].toString().trim(),
-            asesorPrevio,
-            row[2].toString().trim(),
-            segmento,
-            leadInfo.vencimiento || "",
+            fechaEjecucion, polizaKey, "Sin gestión (No encontrada)",
+            estadoPrevio, row[4].toString().trim(), asesorPrevio, row[2].toString().trim(),
+            segmento, leadInfo.vencimiento || "",
             esBroker ? "Broker sin gestión" : "Sin gestión en ninguna fuente"
           ]);
         }
@@ -300,33 +277,26 @@ function UpdateRenovations() {
 
   sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
 
-  // Marcar en columna AD (índice 29) de "Respuestas Renovación" los registros procesados
-  const polizasEnSheet = new Set();
-  for (let i = 0; i < data.length; i++) {
-    let leadInfo = parseLeadJson(data[i][1]);
-    if (leadInfo && leadInfo.poliza) {
-      polizasEnSheet.add(String(leadInfo.poliza).trim());
-    }
-  }
-
+  // Marcado batch de GestionAnalista: una sola escritura en lugar de N setValue() individuales.
+  // Usa polizasProcesadasAnalista (preciso) en lugar de polizasEnSheet (amplio).
+  // Usa dataAnalistaRaw ya leído al inicio (evita segunda lectura de GestionAnalista).
   let contadorMarcados = 0;
-  const lastRowAnalista = GestionAnalista.getLastRow();
-  if (lastRowAnalista >= 2) {
-    const dataAnalista = GestionAnalista.getRange(2, 1, lastRowAnalista - 1, GestionAnalista.getLastColumn()).getValues();
-    const fechaMarca = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
-
-    for (let i = 0; i < dataAnalista.length; i++) {
-      const polizaAnalista = String(dataAnalista[i][10] || "").trim();
-      const marcaActual = (dataAnalista[i][29] || "").toString().trim();
-
-      if (polizaAnalista && polizasEnSheet.has(polizaAnalista) && marcaActual === "") {
-        GestionAnalista.getRange(i + 2, 30).setValue("Cargado al CRM - " + fechaMarca);
+  if (dataAnalistaRaw.length > 0) {
+    const marcasCol = [];
+    for (const row of dataAnalistaRaw) {
+      const polizaAnalista = String(row[10] || "").trim();
+      const marcaActual = (row[29] || "").toString().trim();
+      if (polizaAnalista && polizasProcesadasAnalista.has(polizaAnalista) && marcaActual === "") {
+        marcasCol.push(["Cargado al CRM - " + fechaEjecucion]);
         contadorMarcados++;
+      } else {
+        marcasCol.push([marcaActual]);
       }
     }
-    Logger.log("Registros marcados en columna AD de Analista: " + contadorMarcados);
+    GestionAnalista.getRange(2, 30, dataAnalistaRaw.length, 1).setValues(marcasCol);
   }
 
+  Logger.log("Registros marcados en columna AD de Analista: " + contadorMarcados);
   Logger.log("=== RESUMEN UpdateRenovations ===");
   Logger.log("Actualizados: " + contadorActualizados);
   Logger.log("Protegidos (no tocados): " + contadorProtegidos);
@@ -386,47 +356,6 @@ function guardarLogsRenovaciones(logs, fechaEjecucion, actualizados, protegidos,
   Logger.log("Logs guardados en hoja 'LogRenovaciones'.");
 }
  
-function getDatabaseMap(sheet, keyColIndex) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return new Map();
-
-  // Obtenemos todos los datos de una vez
-  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  const map = new Map();
-
-  for (let row of data) {
-    let key = String(row[keyColIndex]).trim(); // Normalizamos la llave
-    if (key) map.set(key, row);
-  }
-  return map;
-}
-
-
-/**
- * Crea un Map filtrando registros que NO tengan marca en la columna indicada.
- * @param {Sheet} sheet - Hoja de cálculo.
- * @param {number} keyColIndex - Índice de la columna clave (base 0).
- * @param {number} filterColIndex - Índice de la columna de filtro (base 0). Si tiene valor, se excluye.
- * @return {Map} Map con clave → fila completa (solo registros sin marca).
- */
-function getDatabaseMapFiltered(sheet, keyColIndex, filterColIndex) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return new Map();
-
-  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  const map = new Map();
-
-  for (let row of data) {
-    let key = String(row[keyColIndex]).trim();
-    let marca = (row[filterColIndex] || "").toString().trim();
-    if (key && marca === "") {
-      map.set(key, row);
-    }
-  }
-  return map;
-}
-
-
 /**
  * Crea un Map cargando solo registros cuya clave esté en el Set proporcionado.
  * Optimiza memoria al no cargar pólizas que ya están expedidas.
