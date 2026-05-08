@@ -7,8 +7,8 @@ const GestionRenovaciones = Renovations.getSheetByName("JSON");
 const LogsEnvios = Renovations.getSheetByName("LogEnvios");
 const LogErrores = Renovations.getSheetByName("LogErrores");
 const GestionAsesora = SpreadsheetApp.openById("1MryMxNuW1cCjgJ2xj5tm8ut-wcd7PNQHI3WEpJal0U4").getSheetByName("Propietarios")
-const GestionBroker = SpreadsheetApp.openById("1MryMxNuW1cCjgJ2xj5tm8ut-wcd7PNQHI3WEpJal0U4").getSheetByName("Corretaje")
-const GestionCorretaje = SpreadsheetApp.openById("1MryMxNuW1cCjgJ2xj5tm8ut-wcd7PNQHI3WEpJal0U4").getSheetByName("Broker")
+const GestionBroker = SpreadsheetApp.openById("1MryMxNuW1cCjgJ2xj5tm8ut-wcd7PNQHI3WEpJal0U4").getSheetByName("Broker")
+const GestionCorretaje = SpreadsheetApp.openById("1MryMxNuW1cCjgJ2xj5tm8ut-wcd7PNQHI3WEpJal0U4").getSheetByName("Corretaje")
 const GestionAnalista = SpreadsheetApp.openById("1oAfMyBNgkKR97JbUNir7MjM3KFQ2c8YwQ2QrsFvtIrM").getSheetByName("Respuestas Renovación")
 
 const Espejo = SpreadsheetApp.openById("1ACFjJriwgFE-VOUHifx2Rr7zUNk_Ovy0OnQUMHKnvKY").getSheetByName("new_data_polizas- archivo David")
@@ -83,20 +83,47 @@ function UpdateRenovations() {
   const range = sheet.getRange(2, 1, lastRow - 1, 8); // A:H
   const data = range.getValues();
 
+  // Primero: identificar pólizas que NO están expedidas en el sheet
+  const polizasNoExpedidas = new Set();
+  for (let i = 0; i < data.length; i++) {
+    let leadInfo = parseLeadJson(data[i][1]);
+    if (leadInfo && leadInfo.poliza) {
+      const estadoFila = (data[i][4] || "").toString().trim().toLowerCase();
+      if (estadoFila !== "expedido") {
+        polizasNoExpedidas.add(String(leadInfo.poliza).trim());
+      }
+    }
+  }
 
-  const dbAnalista = getDatabaseMap(GestionAnalista, 10);  
-  const dbAsesora = getDatabaseMap(GestionAsesora, 2);    
-  const dbBroker = getDatabaseMap(GestionBroker, 2);
-  const dbCorretaje = getDatabaseMap(GestionCorretaje, 2);
+  // Cargar bases filtrando solo pólizas no expedidas
+  const dbAnalista = getDatabaseMapFiltered(GestionAnalista, 10, 29);  
+  const dbAsesora = getDatabaseMapByKeys(GestionAsesora, 2, polizasNoExpedidas);    
+  const dbBroker = getDatabaseMapByKeys(GestionBroker, 2, polizasNoExpedidas);
+  const dbCorretaje = getDatabaseMapByKeys(GestionCorretaje, 2, polizasNoExpedidas);
 
   const today = new Date();
-  const updates = []; 
+  const logs = [];
+  const fechaEjecucion = Utilities.formatDate(today, "America/Bogota", "dd/MM/yyyy HH:mm:ss");
+
+  Logger.log("=== INICIO UpdateRenovations ===");
+  Logger.log("Total filas a procesar: " + data.length);
+  Logger.log("Pólizas no expedidas (a consultar): " + polizasNoExpedidas.size);
+  Logger.log("Registros en dbAnalista (sin marca CRM): " + dbAnalista.size);
+  Logger.log("Registros en dbAsesora (solo no expedidas): " + dbAsesora.size);
+  Logger.log("Registros en dbBroker (solo no expedidas): " + dbBroker.size);
+  Logger.log("Registros en dbCorretaje (solo no expedidas): " + dbCorretaje.size);
+
+  let contadorActualizados = 0;
+  let contadorProtegidos = 0;
+  let contadorSinPoliza = 0;
+
   for (let i = 0; i < data.length; i++) {
     let row = data[i];
     let jsonString = row[1];
     let leadInfo = parseLeadJson(jsonString);
 
     if (!leadInfo || !leadInfo.poliza) {
+      contadorSinPoliza++;
       continue; 
     }
 
@@ -105,6 +132,8 @@ function UpdateRenovations() {
     const segmento = (row[3] || "").toString().trim().toLowerCase();
     const esBroker = segmento.includes("broker") || segmento.includes("inmobiliaria");
     const estado = row[4].toString().trim().toLowerCase();
+    const estadoAnterior = row[4].toString().trim();
+    const asesorAnterior = row[2].toString().trim();
 
      const estadosProtegidos = [
       "expedido",
@@ -113,41 +142,248 @@ function UpdateRenovations() {
       "correccion",
       "recuperado",
       "caso especial",
+      "cliente ya renovo",
       "desistido",
-      "volver a llamar",
-      "caso revisado"
     ];
 
-    if (!estadosProtegidos.includes(estado)) {
+    if (estadosProtegidos.includes(estado)) {
+      contadorProtegidos++;
+      continue;
+    }
 
-      if (dbAnalista.has(polizaKey)) {
-        const analistaRow = dbAnalista.get(polizaKey);
-        const resultado = processAutogestion(analistaRow);
+    if (dbAnalista.has(polizaKey)) {
+      const analistaRow = dbAnalista.get(polizaKey);
+      const resultado = processAutogestion(analistaRow);
 
-        row[2] = obtenerSiguienteExpedidor();  
-        row[4] = resultado.estado;                     
-        row[5] = JSON.stringify(resultado.data);    
-        row[6] = JSON.stringify(resultado.data.observaciones);
+      // dbAnalista siempre actualiza: Expedido o Autogestionado es ABSOLUTO
+      row[4] = resultado.estado;
+      row[2] = obtenerSiguienteExpedidor();
 
-      } else {
-         let foundRow = dbAsesora.get(polizaKey) || dbBroker.get(polizaKey) || dbCorretaje.get(polizaKey);
+      // Agregar datos de gestión al JSON existente en columna F (no sobrescribir)
+      let datosExistentes = {};
+      try {
+        let rawF = (row[5] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        if (rawF) datosExistentes = JSON.parse(rawF);
+      } catch (e) {}
+      const datosMerge = { ...datosExistentes, ...resultado.data };
+      row[5] = JSON.stringify(datosMerge);
 
-        if (foundRow) {
-          const tipificacion = dbAsesora.has(polizaKey) ? foundRow[41] : foundRow[34];
-
-          if (tipificacion.toString().trim() !== "") {
-            row[4] = tipificacion;
-          } else {
-             processNoGestion(row, today, fechaVenc, esBroker);
-          }
-        } else {
-           processNoGestion(row, today, fechaVenc, esBroker);
+      // Agregar observaciones al JSON existente en columna G
+      let historialObs = [];
+      try {
+        let rawObs = (row[6] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        if (rawObs) {
+          const parsed = JSON.parse(rawObs);
+          historialObs = Array.isArray(parsed) ? parsed : [parsed];
         }
+      } catch (e) {
+        if (row[6]) historialObs.push({ fecha: "Previo", observacion: row[6].toString(), usuario: "Sistema" });
       }
 
+      const fechaCO = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
+      let nuevaObservacion = {
+        fecha: fechaCO,
+        usuario: "Sistema (UpdateRenovations)",
+        estado: resultado.estado,
+        obsCliente: resultado.data.observaciones.obsCliente || "",
+        observaciones: resultado.data.observaciones.observaciones || "",
+        observacionesEjecutivo: resultado.data.observaciones.observacionesEjecutivo || "",
+        observacionRenovacion: resultado.data.observaciones.observacionRenovacion || ""
+      };
+      historialObs.push(nuevaObservacion);
+      row[6] = JSON.stringify(historialObs);
+
+      contadorActualizados++;
+      logs.push([
+        fechaEjecucion,
+        polizaKey,
+        "Analista (Autogestión)",
+        estadoAnterior,
+        resultado.estado,
+        asesorAnterior,
+        row[2],
+        segmento,
+        leadInfo.vencimiento || "",
+        resultado.data.NuevaPoliza || "Sin nueva póliza"
+      ]);
+
+    } else {
+      let foundRow = null;
+      let tipificacionIndex = -1;
+      let fuente = "";
+
+      if (dbAsesora.has(polizaKey)) {
+        foundRow = dbAsesora.get(polizaKey);
+        tipificacionIndex = 41;
+        fuente = "Asesora (Propietarios)";
+      } else if (dbBroker.has(polizaKey)) {
+        foundRow = dbBroker.get(polizaKey);
+        tipificacionIndex = 34;
+        fuente = "Broker";
+      } else if (dbCorretaje.has(polizaKey)) {
+        foundRow = dbCorretaje.get(polizaKey);
+        tipificacionIndex = 34;
+        fuente = "Corretaje";
+      }
+
+      if (foundRow) {
+        const tipificacion = (foundRow[tipificacionIndex] || "").toString().trim();
+
+        if (tipificacion !== "") {
+          const estadoNorm = estado.replace(/\s+/g, "").toLowerCase();
+          const tipificacionNorm = tipificacion.replace(/\s+/g, "").toLowerCase();
+          const esVolverALlamar = estadoNorm === "volverallamar";
+          // Solo "expedido" puede cambiar "volver a llamar" desde Asesora/Broker/Corretaje.
+          // "autogestionado" solo aplica desde dbAnalista (rama separada, línea 141).
+          const permiteActualizar = (tipificacionNorm === "expedido");
+
+          if (esVolverALlamar && !permiteActualizar) {
+            // Protegido: "volver a llamar" no se toca. No se loguea ni cuenta como actualización.
+          } else {
+            row[4] = tipificacion;
+            contadorActualizados++;
+            logs.push([
+              fechaEjecucion,
+              polizaKey,
+              fuente + " (Tipificación)",
+              estadoAnterior,
+              row[4].toString().trim(),
+              asesorAnterior,
+              row[2].toString().trim(),
+              segmento,
+              leadInfo.vencimiento || "",
+              "Tipificación: " + tipificacion
+            ]);
+          }
+        } else {
+          const estadoPrevio = row[4].toString().trim();
+          const asesorPrevio = row[2].toString().trim();
+          processNoGestion(row, today, fechaVenc, esBroker);
+          if (row[4].toString().trim() !== estadoPrevio || row[2].toString().trim() !== asesorPrevio) {
+            contadorActualizados++;
+            logs.push([
+              fechaEjecucion,
+              polizaKey,
+              fuente + " (Sin tipificación → NoGestion)",
+              estadoPrevio,
+              row[4].toString().trim(),
+              asesorPrevio,
+              row[2].toString().trim(),
+              segmento,
+              leadInfo.vencimiento || "",
+              esBroker ? "Broker sin tipificación" : "Sin tipificación"
+            ]);
+          }
+        }
+      } else {
+        const estadoPrevio = row[4].toString().trim();
+        const asesorPrevio = row[2].toString().trim();
+        processNoGestion(row, today, fechaVenc, esBroker);
+        if (row[4].toString().trim() !== estadoPrevio || row[2].toString().trim() !== asesorPrevio) {
+          contadorActualizados++;
+          logs.push([
+            fechaEjecucion,
+            polizaKey,
+            "Sin gestión (No encontrada)",
+            estadoPrevio,
+            row[4].toString().trim(),
+            asesorPrevio,
+            row[2].toString().trim(),
+            segmento,
+            leadInfo.vencimiento || "",
+            esBroker ? "Broker sin gestión" : "Sin gestión en ninguna fuente"
+          ]);
+        }
+      }
     }
   }
+
   sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
+
+  // Marcar en columna AD (índice 29) de "Respuestas Renovación" los registros procesados
+  const polizasEnSheet = new Set();
+  for (let i = 0; i < data.length; i++) {
+    let leadInfo = parseLeadJson(data[i][1]);
+    if (leadInfo && leadInfo.poliza) {
+      polizasEnSheet.add(String(leadInfo.poliza).trim());
+    }
+  }
+
+  let contadorMarcados = 0;
+  const lastRowAnalista = GestionAnalista.getLastRow();
+  if (lastRowAnalista >= 2) {
+    const dataAnalista = GestionAnalista.getRange(2, 1, lastRowAnalista - 1, GestionAnalista.getLastColumn()).getValues();
+    const fechaMarca = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
+
+    for (let i = 0; i < dataAnalista.length; i++) {
+      const polizaAnalista = String(dataAnalista[i][10] || "").trim();
+      const marcaActual = (dataAnalista[i][29] || "").toString().trim();
+
+      if (polizaAnalista && polizasEnSheet.has(polizaAnalista) && marcaActual === "") {
+        GestionAnalista.getRange(i + 2, 30).setValue("Cargado al CRM - " + fechaMarca);
+        contadorMarcados++;
+      }
+    }
+    Logger.log("Registros marcados en columna AD de Analista: " + contadorMarcados);
+  }
+
+  Logger.log("=== RESUMEN UpdateRenovations ===");
+  Logger.log("Actualizados: " + contadorActualizados);
+  Logger.log("Protegidos (no tocados): " + contadorProtegidos);
+  Logger.log("Sin póliza (saltados): " + contadorSinPoliza);
+  Logger.log("Marcados en Analista (AD): " + contadorMarcados);
+  Logger.log("Total logs generados: " + logs.length);
+
+  guardarLogsRenovaciones(logs, fechaEjecucion, contadorActualizados, contadorProtegidos, contadorSinPoliza);
+}
+
+
+/**
+ * Guarda los logs de UpdateRenovations en la hoja "LogRenovaciones".
+ * Si la hoja no existe, la crea con encabezados.
+ * @param {Array[]} logs - Array de filas de log.
+ * @param {string} fechaEjecucion - Timestamp de la ejecución.
+ * @param {number} actualizados - Total de registros actualizados.
+ * @param {number} protegidos - Total de registros protegidos.
+ * @param {number} sinPoliza - Total de registros sin póliza.
+ */
+function guardarLogsRenovaciones(logs, fechaEjecucion, actualizados, protegidos, sinPoliza) {
+  let logSheet = Renovations.getSheetByName("LogRenovaciones");
+
+  if (!logSheet) {
+    logSheet = Renovations.insertSheet("LogRenovaciones");
+    logSheet.appendRow([
+      "Fecha Ejecución",
+      "Póliza",
+      "Fuente",
+      "Estado Anterior",
+      "Estado Nuevo",
+      "Asesor Anterior",
+      "Asesor Nuevo",
+      "Segmento",
+      "Fecha Vencimiento",
+      "Detalle"
+    ]);
+    logSheet.getRange(1, 1, 1, 10).setFontWeight("bold");
+    Logger.log("Hoja 'LogRenovaciones' creada con encabezados.");
+  }
+
+  if (logs.length > 0) {
+    const ultimaFila = logSheet.getLastRow();
+    logSheet.getRange(ultimaFila + 1, 1, logs.length, 10).setValues(logs);
+  }
+
+  logSheet.appendRow([
+    fechaEjecucion,
+    "--- RESUMEN ---",
+    "Actualizados: " + actualizados,
+    "Protegidos: " + protegidos,
+    "Sin póliza: " + sinPoliza,
+    "Total logs: " + logs.length,
+    "", "", "", ""
+  ]);
+
+  Logger.log("Logs guardados en hoja 'LogRenovaciones'.");
 }
  
 function getDatabaseMap(sheet, keyColIndex) {
@@ -166,20 +402,79 @@ function getDatabaseMap(sheet, keyColIndex) {
 }
 
 
-function processAutogestion(analistaRow) {
-  // Indices basados en tu código original (ajustados a base 0)
-  // Col K es indice 10 en la hoja, pero aquí analistaRow es toda la fila.
-  // Col 25 (Nueva Poliza) -> Index 24
+/**
+ * Crea un Map filtrando registros que NO tengan marca en la columna indicada.
+ * @param {Sheet} sheet - Hoja de cálculo.
+ * @param {number} keyColIndex - Índice de la columna clave (base 0).
+ * @param {number} filterColIndex - Índice de la columna de filtro (base 0). Si tiene valor, se excluye.
+ * @return {Map} Map con clave → fila completa (solo registros sin marca).
+ */
+function getDatabaseMapFiltered(sheet, keyColIndex, filterColIndex) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return new Map();
 
-  const nuevaPoliza = analistaRow[24];
-  const estado = nuevaPoliza ? "Expedido" : "Autogestionado";
+  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const map = new Map();
+
+  for (let row of data) {
+    let key = String(row[keyColIndex]).trim();
+    let marca = (row[filterColIndex] || "").toString().trim();
+    if (key && marca === "") {
+      map.set(key, row);
+    }
+  }
+  return map;
+}
+
+
+/**
+ * Crea un Map cargando solo registros cuya clave esté en el Set proporcionado.
+ * Optimiza memoria al no cargar pólizas que ya están expedidas.
+ * @param {Sheet} sheet - Hoja de cálculo.
+ * @param {number} keyColIndex - Índice de la columna clave (base 0).
+ * @param {Set} allowedKeys - Set de claves permitidas.
+ * @return {Map} Map con clave → fila completa (solo registros con clave en allowedKeys).
+ */
+function getDatabaseMapByKeys(sheet, keyColIndex, allowedKeys) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return new Map();
+
+  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const map = new Map();
+
+  for (let row of data) {
+    let key = String(row[keyColIndex]).trim();
+    if (key && allowedKeys.has(key)) {
+      map.set(key, row);
+    }
+  }
+  return map;
+}
+
+
+function processAutogestion(analistaRow) {
+  const valorZ = (analistaRow[25] || "").toString().trim();
+
+  let estado = "Autogestionado";
+  let observacionRenovacion = "";
+
+  if (valorZ !== "") {
+    const esNumeroPoliza = /^50\d+/.test(valorZ);
+    if (esNumeroPoliza) {
+      estado = "Expedido";
+      observacionRenovacion = "Póliza renovada con número: " + valorZ;
+    } else {
+      estado = "Autogestionado";
+      observacionRenovacion = valorZ;
+    }
+  }
 
   const autoGestionData = {
     sarlaft: analistaRow[7],
     formatoRenovacion: analistaRow[8],
     pazYsalvo: analistaRow[20],
     documento: analistaRow[19],
-    NuevaPoliza: nuevaPoliza,
+    NuevaPoliza: /^50\d+/.test(valorZ) ? valorZ : "",
     valorPoliza: analistaRow[25],
     primaNeta: analistaRow[27],
     correo: analistaRow[15],
@@ -189,7 +484,8 @@ function processAutogestion(analistaRow) {
     observaciones: {
       obsCliente: analistaRow[11],
       observaciones: analistaRow[22],
-      observacionesEjecutivo: analistaRow[21]
+      observacionesEjecutivo: analistaRow[21],
+      observacionRenovacion: observacionRenovacion
     }
   };
 
@@ -200,46 +496,43 @@ function processAutogestion(analistaRow) {
 function processNoGestion(row, today, fechaVenc, esBroker) {
   if (!fechaVenc) return;
 
-  const fecha2Meses = new Date(fechaVenc);
-  fecha2Meses.setMonth(fecha2Meses.getMonth() + 2); // Ojo: Tu código decía +6 en la variable fecha2Meses, aunque el nombre sugiere 2.
+  const estadoActual = (row[4] || "").toString().trim().toLowerCase();
 
-  let asesorActual = row[2];
-  let estadoActual = row[4];
+  // Solo aplica si el estado es "Pendiente Renovacion"
+  if (estadoActual !== "pendiente renovacion") return;
 
-  if (today >= fecha2Meses) {
+  const fecha5Meses = new Date(fechaVenc);
+  fecha5Meses.setMonth(fecha5Meses.getMonth() + 5);
+
+  if (today >= fecha5Meses) {
     row[4] = "VENCIDO";
   } else {
-    // Lógica Broker
+    // Broker → Propietario: si pasaron 15 días del vencimiento
     if (esBroker) {
       let fecha15 = new Date(fechaVenc);
       fecha15.setDate(fecha15.getDate() + 15);
 
       if (today >= fecha15) {
-        row[3] = "PROPIETARIO"; // Cambio segmento
-        row[4] = "Pendiente Renovacion";
-        // Asignación de lead si cambió a propietario
-        if (!asesorActual || asesorActual.toString().trim() === "") {
-          const nuevoAsesor = getNewLeadAssignment();
-          row[2] = nuevoAsesor;
-        }
-        return;
+        row[3] = "PROPIETARIO";
       }
     }
 
-    // Asignación general si no tiene asesor
-    if (!asesorActual || asesorActual.toString().trim() === "") {
+    // Asignar asesor si no tiene uno asignado
+    let asesorActual = (row[2] || "").toString().trim();
+    if (asesorActual === "") {
       const nuevoAsesor = getNewLeadAssignment();
       row[2] = nuevoAsesor;
-      if (!estadoActual || estadoActual.toString().trim() === "") {
-        row[4] = "Pendiente Renovacion";
-      }
     }
   }
 }
 
 function getNewLeadAssignment() {
-    let asignacion = AssignLead("Renovations");
-    return asignacion.email;
+  let asignacion = AssignLead("Renovations");
+  if (!asignacion || !asignacion.email) {
+    Logger.log("No hay asesores disponibles para asignar renovación.");
+    return "";
+  }
+  return asignacion.email;
 }
 
 
@@ -423,8 +716,18 @@ function guardarGestionRenovacion(datos, observaciones, archivosBase64) {
       }
     }
 
+    // Preservar URLs de archivos previos que ya estaban en la columna F
+    const urlsPrevias = {};
+    const camposURL = ['sarlaftArchivoURL', 'propietarioDocURL', 'otroSiURL', 'cesionCedulaURL', 'cesionDocAdicionalURL'];
+    for (const campo of camposURL) {
+      if (currentJson[campo] && !urlsNuevas[campo]) {
+        urlsPrevias[campo] = currentJson[campo];
+      }
+    }
+
     const finalJsonData = {
       ...datos,
+      ...urlsPrevias,
       ...urlsNuevas
     };
 

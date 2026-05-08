@@ -6128,6 +6128,20 @@ function filtrarDatosYRecalcularKPIs() {
       $('#db_NUEVA_ADMINISTRACION').val(formatearMoneda(admonActual));
     }
 
+    // Precargar servicios públicos y daños y faltantes si están vacíos o en 0
+    if (parsearMoneda($('#nuevosServicios').val()) === 0) {
+      const serviciosActual = parsearMoneda($('#db_VALOR_ASEG_SEP').text());
+      if (serviciosActual > 0) {
+        $('#nuevosServicios').val(formatearMoneda(serviciosActual));
+      }
+    }
+    if (parsearMoneda($('#nuevosDyF').val()) === 0) {
+      const dyfActual = parsearMoneda($('#db_VALOR_ASEG_DYF').text());
+      if (dyfActual > 0) {
+        $('#nuevosDyF').val(formatearMoneda(dyfActual));
+      }
+    }
+
     $('#badgeIPC').text(`Base + ${ipc}%`);
     calcularCotizacion();
   }
@@ -6480,7 +6494,7 @@ function calcularCotizacion() {
       .toUpperCase();
   }
 
-  // Detectar cambios en los datos del propietario y actualizar currentLeadData
+  // Detectar cambios en los datos de contacto y actualizar currentLeadData
   $('#propietariotelfijo, #propietarioTelefono, #propietarioEmail').on('input change', function () {
     if (!currentLeadData || !currentLeadData.leadData) return;
 
@@ -6491,7 +6505,7 @@ function calcularCotizacion() {
     if (id === 'propietarioTelefono') currentLeadData.leadData.celular = valor;
     if (id === 'propietarioEmail') currentLeadData.leadData.email = valor;
 
-    // Visualmente marcar que hubo un cambio (opcional, para feedback)
+    // Visualmente marcar que hubo un cambio
     $(this).addClass('border-primary');
   });
 
@@ -6529,74 +6543,7 @@ function calcularCotizacion() {
   }
   // Función para avanzar desde el Paso 1 (Datos) al Paso 2 (SARLAFT)
 
-  function limpiarFormularioRenovaciones() {
-    console.log('🧹 Reset completo del flujo de renovación...');
-
-    // 1. VARIABLES GLOBALES (Estado Lógico)
-    tipoPolizaSeleccionada = null;
-    sarlaftVerificado = false;
-    estadoSarlaft = null;
-    otpEnviado = false;
-    codigoOTPGenerado = null;
-    otpMetodoEnviado = '';
-    otpIdentificadorEnviado = '';
-    procesoEspecialSeleccionado = null;
-    archivosSubidos = {};
-
-    // 2. RESETEAR INPUTS DE GESTIÓN
-    $('#db_CONVERSACION_RENOVACION').val('');
-    $('#db_FECHA_SEGUIMIENTO').val('');
-    $('#db_CONTACTO').val('');
-    $('.otp-input').val('');
-
-    // 3. RESETEAR PASO 2: SARLAFT (Estado Virgen)
-    $('#sarlaft-pregunta-inicial').removeClass('hidden').addClass('fade-in-up'); // Mostrar pregunta inicial
-    $('#sarlaft-gestion-requerida').addClass('hidden');
-    $('#sarlaft-validacion-fecha').addClass('hidden');
-    $('#sarlaft-confirmado').addClass('hidden');
-    $('#resultado-fecha-container').addClass('hidden');
-    $('#inputFechaSarlaft').val('');
-    $('#sarlaftFileInput').val('');
-    $('#ai-validation-container').addClass('hidden');
-    $('#sarlaft-upload-success').addClass('hidden');
-    $('#sarlaftUploadArea').removeClass('hidden');
-
-    // 4. RESETEAR PASO 3: CUMPLIMIENTO (Estado Virgen)
-    $('#pazSalvoModalRenova').val('');
-    $('#estadoInmuebleRenova').val('');
-    $('#alertaRestriccion').addClass('hidden');
-
-    // Resetear tarjeta de datos de inquilino (máscara)
-    $('#lblDocumentoMask').text('*** *** ****');
-    documentoVisible = false;
-    $('#iconEye').removeClass('fa-eye-slash').addClass('fa-eye');
-
-    // 5. RESETEAR PASO 4: COTIZADOR
-    $('#formularioNuevaPoliza').addClass('hidden');
-    $('.poliza-selector').removeClass('selected');
-    $('#db_NUEVO_CANON_ADMON, #nuevosServicios, #nuevosDyF').val('');
-    $('#alertaVigencia, #alertaOtroSi').addClass('hidden');
-    $('#input_IPC').removeClass('text-danger is-invalid');
-
-    // 6. RESETEAR PASO 5: OTP
-    $('#validacionOTP, #confirmacionExitosa').addClass('hidden');
-    $('#envioOTP').removeClass('hidden');
-
-    // 7. RESETEAR CHECKLIST LATERAL
-    $('#check-propietario').prop('checked', false).prop('disabled', false);
-    $('#check-sarlaft').prop('checked', false).prop('disabled', true);
-    $('#check-cumplimiento').prop('checked', false).prop('disabled', true);
-    $('#check-poliza').prop('checked', false).prop('disabled', true);
-    $('#check-otp').prop('checked', false).prop('disabled', true);
-
-    // 8. GESTIÓN DE VISTAS (Volver al Paso 1)
-    $('.step-section').addClass('hidden').removeClass('fade-in-up');
-    $('#step-propietario').removeClass('hidden').addClass('fade-in-up');
-    $('#step-procesos-especiales').addClass('hidden');
-
-    // 9. ESTADO GENERAL
-    actualizarEstadoGestion('Inicie verificando los datos del propietario', 'info');
-  }
+  // limpiarFormularioRenovaciones está definida más abajo (definición única unificada)
 
   function navegarLeadRenovaciones(direccion) {
     // 1. Validar si hay tabla y datos
@@ -6744,17 +6691,15 @@ function calcularCotizacion() {
     if (currentLeadData && currentLeadData.leadData) {
       segmento = (currentLeadData.leadData.segmento || currentLeadData.leadData.Segmento || 'PROPIETARIO').toString().toUpperCase();
     }
-    var telefono = '';
-    var email   = '';
-    var nombre  = '';
+    // Siempre leer de los inputs del paso 1 (datos actualizados por el asesor)
+    var telefono = ($('#propietarioTelefono').val() || '').trim();
+    var email    = ($('#propietarioEmail').val()    || '').trim();
+    var nombre   = '';
+
     if (segmento.includes('BROKER') || segmento.includes('INMOBILIARIA')) {
-      telefono = ($('#br_Tel').text()   || '').trim();
-      email    = ($('#br_Email').text() || '').trim();
-      nombre   = ($('#br_Nombre').text() || '').trim();
+      nombre = ($('#br_Nombre').text() || '').trim();
     } else {
-      telefono = ($('#propietarioTelefono').val() || '').trim();
-      email    = ($('#propietarioEmail').val()    || '').trim();
-      nombre   = ($('#db_ASEGURADO').text()       || '').trim();
+      nombre = ($('#db_ASEGURADO').text() || '').trim();
     }
     return { telefono: telefono, email: email, nombre: nombre, segmento: segmento };
   }
@@ -6765,9 +6710,11 @@ function calcularCotizacion() {
     var dest        = obtenerDestinatarioOTP();
     var esBrokerInm = dest.segmento.includes('BROKER') || dest.segmento.includes('INMOBILIARIA');
 
-    // ── Rama WhatsApp ──────────────────────────────────────────────────────
-    if (metodo === 'WhatsApp' || metodo === 'whatsapp') {
+    // Determinar destino para mostrar en confirmación
+    var destinoTexto = '';
+    var tipoContacto = esBrokerInm ? dest.segmento : 'Propietario';
 
+    if (metodo === 'WhatsApp' || metodo === 'whatsapp') {
       if (!dest.telefono) {
         Swal.fire('Error',
           esBrokerInm ? 'No se encontro telefono del ' + dest.segmento + '.'
@@ -6775,6 +6722,43 @@ function calcularCotizacion() {
           'warning');
         return;
       }
+      destinoTexto = dest.telefono;
+    } else if (metodo === 'email' || metodo === 'Email') {
+      if (!dest.email) {
+        Swal.fire('Error',
+          esBrokerInm ? 'No se encontro correo del ' + dest.segmento + '.'
+                      : 'No se encontro un correo electronico para enviar el OTP.',
+          'warning');
+        return;
+      }
+      destinoTexto = dest.email;
+    }
+
+    // Confirmación antes de enviar
+    Swal.fire({
+      title: 'Confirmar Envío de OTP',
+      html: '<p>Se enviará el código de verificación por <strong>' + metodo + '</strong> a:</p>' +
+            '<div class="alert alert-info text-start mt-2">' +
+            '<strong>' + tipoContacto + ':</strong> ' + dest.nombre + '<br>' +
+            '<strong>Destino:</strong> ' + destinoTexto +
+            '</div>' +
+            '<p class="text-muted small">¿Desea continuar?</p>',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, enviar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#673ab7',
+      cancelButtonColor: '#6c757d'
+    }).then(function(result) {
+      if (result.isConfirmed) {
+        ejecutarEnvioOTP(metodo, dest, esBrokerInm);
+      }
+    });
+  }
+
+  function ejecutarEnvioOTP(metodo, dest, esBrokerInm) {
+    // ── Rama WhatsApp ──────────────────────────────────────────────────────
+    if (metodo === 'WhatsApp' || metodo === 'whatsapp') {
 
       var telefonoLimpio = dest.telefono.replace(/\D/g, '');
       if (!telefonoLimpio.startsWith('57')) telefonoLimpio = '57' + telefonoLimpio;
@@ -6814,14 +6798,6 @@ function calcularCotizacion() {
 
     // ── Rama Email ─────────────────────────────────────────────────────────
     } else if (metodo === 'email' || metodo === 'Email') {
-
-      if (!dest.email) {
-        Swal.fire('Error',
-          esBrokerInm ? 'No se encontro correo del ' + dest.segmento + '.'
-                      : 'No se encontro un correo electronico para enviar el OTP.',
-          'warning');
-        return;
-      }
 
       Swal.fire({
         title: 'Enviando codigo...',
@@ -7588,9 +7564,9 @@ function marcarNoRenova() {
 
 
   function limpiarFormularioRenovaciones() {
-    console.log('🧹 Preparando formulario para nueva gestión...');
+    console.log('🧹 Reset completo del flujo de renovación...');
 
-    // 1. RESETEAR VARIABLES LÓGICAS (Para que no se mezclen estados)
+    // 1. VARIABLES GLOBALES (Estado Lógico)
     currentEtapaIndex = 0;
     tipoPolizaSeleccionada = null;
     sarlaftVerificado = false;
@@ -7600,65 +7576,78 @@ function marcarNoRenova() {
     otpMetodoEnviado = '';
     otpIdentificadorEnviado = '';
     procesoEspecialSeleccionado = null;
-    archivosSubidos = {}; // Limpiar memoria de archivos
+    archivosSubidos = {};
+
+    // 2. RESETEAR INPUTS DE GESTIÓN
+    $('#db_CONVERSACION_RENOVACION').val('');
+    $('#db_FECHA_SEGUIMIENTO').val('');
+    $('#db_CONTACTO').val('');
+    $('.otp-input').val('');
 
     // Limpiar inputs de archivos y previews
     $('#sarlaftFileInput, #otroSiFileInput, #cesionDocAdicionalInput').val('');
     $('#otroSiFilePreview, #cesionDocAdicionalPreview, #sarlaftFilePreview').empty();
     $('input[type="file"]', '#modalGestionRenovaciones').val('');
 
-    $('#pazSalvoModalRenova').val('');
-    $('#estadoInmuebleRenova').val('');
-    $('#inputFechaSarlaft').val('');
-
+    // Limpiar campos de cesión
     $('#cesionTipoDoc').val('');
     $('#cesionNombre, #cesionNumDoc, #cesionTelefono').val('');
 
+    // Resetear tipo de servicio
     $('#tipoServicio').val('VIVIENDA');
 
-    $('#db_CONTACTO').val('');
+    // 3. RESETEAR PASO 2: SARLAFT (Estado Virgen)
+    $('#sarlaft-pregunta-inicial').removeClass('hidden').addClass('fade-in-up');
+    $('#sarlaft-gestion-requerida').addClass('hidden');
+    $('#sarlaft-validacion-fecha').addClass('hidden');
+    $('#sarlaft-confirmado').addClass('hidden');
+    $('#resultado-fecha-container').addClass('hidden');
+    $('#msg-fecha-valida, #msg-fecha-vencida').addClass('hidden');
+    $('#inputFechaSarlaft').val('');
+    $('#sarlaftFileInput').val('');
+    $('#ai-validation-container').addClass('hidden');
+    $('#ai-progress-bar').css('width', '0%');
+    $('#ai-status-text').text('');
+    $('#sarlaft-upload-success').addClass('hidden');
+    $('#sarlaftUploadArea').removeClass('hidden');
 
-    $('#db_CONVERSACION_RENOVACION').val('');
-    $('#db_FECHA_SEGUIMIENTO').val('');
+    // 4. RESETEAR PASO 3: CUMPLIMIENTO (Estado Virgen)
+    $('#pazSalvoModalRenova').val('');
+    $('#estadoInmuebleRenova').val('');
+    $('#alertaRestriccion').addClass('hidden');
 
-    $('#check-propietario').prop('checked', false).prop('disabled', false); // Paso 1 habilitado
+    // Resetear tarjeta de datos de inquilino (máscara)
+    $('#lblDocumentoMask').text('*** *** ****');
+    documentoVisible = false;
+    $('#iconEye').removeClass('fa-eye-slash').addClass('fa-eye');
+
+    // 5. RESETEAR PASO 4: COTIZADOR
+    $('#formularioNuevaPoliza').addClass('hidden');
+    $('.poliza-selector').removeClass('selected');
+    $('#db_NUEVO_CANON_ADMON, #nuevosServicios, #nuevosDyF').val('');
+    $('#fechaInicioVigencia').val('');
+    $('#cotizacionTotalFooter').text('$0');
+    $('#alertaVigencia, #alertaOtroSi').addClass('hidden');
+    $('#input_IPC').removeClass('text-danger is-invalid');
+
+    // 6. RESETEAR PASO 5: OTP (Variables + UI + Hidden inputs)
+    $('#validacionOTP, #confirmacionExitosa').addClass('hidden');
+    $('#envioOTP').removeClass('hidden');
+    $('#db_VALIDACION_RENOVACION').val('');
+    $('#db_VALIDACION_CONTACTO_FINAL').val('');
+
+    // 7. RESETEAR CHECKLIST LATERAL
+    $('#check-propietario').prop('checked', false).prop('disabled', false);
     $('#check-sarlaft').prop('checked', false).prop('disabled', true);
     $('#check-cumplimiento').prop('checked', false).prop('disabled', true);
     $('#check-poliza').prop('checked', false).prop('disabled', true);
     $('#check-otp').prop('checked', false).prop('disabled', true);
 
-    // 3. LIMPIAR CAMPOS "TRANSACCIONALES" (Los de la nueva gestión)
-    // NOTA: No borramos nombre, cedula, telefono ni email aquí. Eso se sobreescribe al cargar.
-    $('#db_CONVERSACION_RENOVACION').val(''); // Limpiar observaciones nuevas
-    $('#db_FECHA_SEGUIMIENTO').val('');
-    $('#db_CONTACTO').val('');
-
-    // Limpiar Cotizador Nuevo
-    $('#db_NUEVO_CANON_ADMON').val('');
-    $('#nuevosServicios').val('');
-    $('#nuevosDyF').val('');
-    $('#fechaInicioVigencia').val('');
-    $('#cotizacionTotalFooter').text('$0');
-
-    // Limpiar OTP
-    $('.otp-input').val('');
-
-    // 4. GESTIÓN DE VISTAS (Resetear Pasos)
-    // Ocultar pasos avanzados
-    $('#step-sarlaft').addClass('hidden');
-    $('#step-cumplimiento').addClass('hidden');
-    $('#step-poliza').addClass('hidden');
-    $('#step-otp').addClass('hidden');
-    $('#step-procesos-especiales').addClass('hidden');
-
-    // MOSTRAR SIEMPRE EL PASO 1 (Datos Propietario) y OBSERVACIONES
+    // 8. GESTIÓN DE VISTAS (Volver al Paso 1)
+    $('#step-propietario, #step-sarlaft, #step-cumplimiento, #step-poliza, #step-otp, #step-procesos-especiales').addClass('hidden').removeClass('fade-in-up');
     $('#step-propietario').removeClass('hidden').addClass('fade-in-up');
 
-    // Resetear UI Interna de Pasos
-    $('.poliza-selector').removeClass('selected');
-    $('#formularioNuevaPoliza').addClass('hidden');
-
-    // Resetear Badge de Estado
+    // 9. ESTADO GENERAL
     actualizarEstadoGestion('Verifique los datos del propietario para iniciar', 'info');
   }
 
