@@ -29,6 +29,32 @@
   let documentoVisible = false;
   let archivosSubidos = {};
 
+  /**
+   * Configuración de validación para procesos especiales.
+   * Define límites de archivos, tamaño, formatos y observaciones.
+   */
+  const PROCESO_ESPECIAL_CONFIG = {
+    MAX_ARCHIVOS: 10,
+    MAX_SIZE_BYTES: 15 * 1024 * 1024,
+    FORMATOS_PERMITIDOS: ['application/pdf', 'image/jpeg', 'image/png'],
+    EXTENSIONES_PERMITIDAS: ['.pdf', '.jpg', '.jpeg', '.png'],
+    MAX_OBSERVACIONES_CHARS: 2000
+  };
+
+  /**
+   * Tipos de proceso especial con sus claves, labels y prefijos para nomenclatura de archivos.
+   */
+  const PROCESO_TIPOS = {
+    OTRO_SI: { key: 'OTRO_SI', label: 'Otro Sí', prefix: 'OTRO_SI' },
+    CESION: { key: 'CESION', label: 'Cesión del Contrato', prefix: 'CESION' },
+    CORRECCION: { key: 'CORRECCION', label: 'Correcciones', prefix: 'CORRECCION' }
+  };
+
+  /** @type {string|null} Tipo de proceso especial actualmente seleccionado */
+  let procesoEspecialSeleccionado = null;
+
+  /** @type {Array<{file: File, name: string, fullName: string, size: number, sizeDisplay: string, mimeType: string}>} */
+  let archivosSeleccionados = [];
 
   let datosRenovaciones = {
     "poliza": '',
@@ -391,7 +417,7 @@
 
 
   function actualizarEtapaFunnel(currentEtapaVisible, highestReachedStageFromLead) {
-    $('.progressbar li').removeClass('completed current-etapa highest-reached');
+    $('.progressbar li.progress-step').removeClass('completed current-etapa highest-reached');
 
     const currentEtapaVisibleIndex = etapaNombres.indexOf(currentEtapaVisible);
     const highestReachedIndex = etapaNombres.indexOf(highestReachedStageFromLead);
@@ -410,7 +436,7 @@
       $(`#etapa${currentEtapaVisibleIndex + 1}`).addClass('current-etapa');
     }
 
-    $('.progressbar li').each(function () {
+    $('.progressbar li.progress-step').each(function () {
       const originalEtapaName = $(this).data('etapa-nombre');
       let displayEtapaName = originalEtapaName;
 
@@ -4072,7 +4098,7 @@
           $("#Tasa_Conversion").text(response.totalConversion);
           $("#Tasa_Contactabilidad").text(response.contactabilidad + "%");
           $("#ProductoAsesor").text(response.expertise);
-          if (response.expertise === "Renovations" || response.expertise === "CorreccionesBI" ) {
+          if (response.expertise === "Renovations" || response.expertise === "CorreccionesBI") {
 
             if ($.fn.DataTable.isDataTable('#dataTable')) {
               table.destroy();
@@ -4358,7 +4384,7 @@
         { data: 'leadData.poliza', title: 'Póliza', defaultContent: '---' },
         { data: 'leadData.asegurado', title: 'Cliente', defaultContent: '---' },
         { data: 'estadoGestion', title: 'Estado', defaultContent: '---' },
-        { data: 'leadData.canon', title: 'Canon', defaultContent: '---', render: function(data) { return data ? formatearMoneda(data) : '---'; } },
+        { data: 'leadData.canon', title: 'Canon', defaultContent: '---', render: function (data) { return data ? formatearMoneda(data) : '---'; } },
         { data: 'nombreAgente', title: 'Asesor', defaultContent: '---' },
         {
           data: null,
@@ -4462,7 +4488,7 @@
       $('.kpi-section-container').show(); // Por si acaso usas el contenedor para padding
 
       // Lógica de Expertise: Muestra SOLO el KPI que corresponde
-      if (currentUserExpertise === "Renovations" || currentUserExpertise  === "CorreccionesBI") {
+      if (currentUserExpertise === "Renovations" || currentUserExpertise === "CorreccionesBI") {
         $('#kpiRenovaciones').show();
         $('#kpiVentas').hide();
       } else {
@@ -4494,14 +4520,14 @@
 
       // 5. KPIs de recuperacion
       var totalRecuperacion = dataSetRecuperacion.length;
-      var recuperadasKpi = dataSetRecuperacion.filter(function(item) {
+      var recuperadasKpi = dataSetRecuperacion.filter(function (item) {
         return (item.estadoGestion || '').toLowerCase() === 'recuperado';
       }).length;
-      var desistidasKpi = dataSetRecuperacion.filter(function(item) {
+      var desistidasKpi = dataSetRecuperacion.filter(function (item) {
         var est = (item.estadoGestion || '').toLowerCase();
         return est === 'desistido' || est === 'no interesado' || est === 'no renueva' ||
-               est === 'venta inmueble' || est === 'no justifica motivo' ||
-               est === 'ilocalizado' || est === 'cambio de arrendatario';
+          est === 'venta inmueble' || est === 'no justifica motivo' ||
+          est === 'ilocalizado' || est === 'cambio de arrendatario';
       }).length;
       var tasaRecuperacion = totalRecuperacion > 0 ? ((recuperadasKpi / totalRecuperacion) * 100).toFixed(1) : '0.0';
 
@@ -4718,7 +4744,7 @@
     });
     $('#reiterarCoberturasIndModal select[name="continuarInd"]').on('change', function () {
       if ($(this).val() === 'No') {
-        showWarningAlert("¿Está seguro de que desea desistir la gestión para este lead?", function(confirmed) {
+        showWarningAlert("¿Está seguro de que desea desistir la gestión para este lead?", function (confirmed) {
           if (confirmed) {
             $('#reiterarCoberturasIndModal').modal('hide');
             $('#modalGestionLead').modal('hide');
@@ -4729,7 +4755,7 @@
     $('#frecuenciaDeporte').on('change', function () {
       const selectedValue = $(this).val();
       if (selectedValue === '6') {
-        showWarningAlert("La práctica frecuente de deportes extremos puede afectar la asegurabilidad. La solicitud podría requerir evaluación adicional. ¿Desea continuar?", function(confirmed) {
+        showWarningAlert("La práctica frecuente de deportes extremos puede afectar la asegurabilidad. La solicitud podría requerir evaluación adicional. ¿Desea continuar?", function (confirmed) {
           if (!confirmed) {
             $('#frecuenciaDeporte').val('');
           }
@@ -4941,83 +4967,83 @@
 
 
 
-$(document).on("click", "#renovar", function () {
-    // 1. LIMPIEZA INICIAL PROFUNDA (Reset UI)
-    limpiarFormularioRenovaciones();
+    $(document).on("click", "#renovar", function () {
+      // 1. LIMPIEZA INICIAL PROFUNDA (Reset UI)
+      limpiarFormularioRenovaciones();
 
-    $("#cardBrokerContainer").addClass("d-none");
-    $("#propietarioTelefono, #propietarioEmail").val("").css({
+      $("#cardBrokerContainer").addClass("d-none");
+      $("#propietarioTelefono, #propietarioEmail").val("").css({
         "border-color": "",
         "background-color": ""
-    }).removeAttr("title");
-    $("#lblTituloSegmento, #br_Nombre, #br_Id, #br_Email, #br_Tel").text("---");
-    $("#br_WpLink").hide();
+      }).removeAttr("title");
+      $("#lblTituloSegmento, #br_Nombre, #br_Id, #br_Email, #br_Tel").text("---");
+      $("#br_WpLink").hide();
 
-    // 2. OBTENER DATOS
-    let tableData = $(this).closest("tr");
-    let rowData = table.row(tableData).data();
-    currentLeadData = rowData;
+      // 2. OBTENER DATOS
+      let tableData = $(this).closest("tr");
+      let rowData = table.row(tableData).data();
+      currentLeadData = rowData;
 
-    const leadData = currentLeadData.leadData;
+      const leadData = currentLeadData.leadData;
 
-    datosEtapasRenovaciones = {
+      datosEtapasRenovaciones = {
         "Contacto Inicial y Datos": {
-            id: '', poliza: '', solicitud: '', asegurado: '', tipoDocumento: '', documento: '', vigencia: '',
-            vencimiento: '', dias: '', meses: '', tasa: '', canon: '', admon: '', valorAsegSep: '',
-            valorAsegDyf: '', direccionRiesgo: '', telefono1: '', celular: '', email: '', destinoInmueble: '',
-            segmento: '', nuevoCanon: '',
-            ejecutivo: '', nombreBroker: '', correoBroker: '', msgAvisoRenovacion: '', msgGestion: '',
-            conversacionRenovacion: '', esArrendatarioFallecido: false, datosContactoActualizados: false,
-            resultadoGestion: '', observaciones: ''
+          id: '', poliza: '', solicitud: '', asegurado: '', tipoDocumento: '', documento: '', vigencia: '',
+          vencimiento: '', dias: '', meses: '', tasa: '', canon: '', admon: '', valorAsegSep: '',
+          valorAsegDyf: '', direccionRiesgo: '', telefono1: '', celular: '', email: '', destinoInmueble: '',
+          segmento: '', nuevoCanon: '',
+          ejecutivo: '', nombreBroker: '', correoBroker: '', msgAvisoRenovacion: '', msgGestion: '',
+          conversacionRenovacion: '', esArrendatarioFallecido: false, datosContactoActualizados: false,
+          resultadoGestion: '', observaciones: ''
         },
         "Cumplimiento y Validaciones": {
-            mantieneMismoCanon: false, nuevoCanon: '', nuevaAdministracion: '', sarlaft: '', fechaUltimoSarlaft: '',
-            renovarSarlaft: '', checkCorreoEnviado: '', linkSarlaftEnviado: false, contacto: '', validacionContacto: '',
-            estadoCliente: '', motivoNoRenovacion: '', validacionRenovacion: '', validacionMotivosNoRenovacion: '',
-            observacionesSarlaft: ''
+          mantieneMismoCanon: false, nuevoCanon: '', nuevaAdministracion: '', sarlaft: '', fechaUltimoSarlaft: '',
+          renovarSarlaft: '', checkCorreoEnviado: '', linkSarlaftEnviado: false, contacto: '', validacionContacto: '',
+          estadoCliente: '', motivoNoRenovacion: '', validacionRenovacion: '', validacionMotivosNoRenovacion: '',
+          observacionesSarlaft: ''
         },
         "Envio a Emision": {
-            confirmacionCliente: false, nuevaPolizaEmitida: false, fechaEmision: '', correoEmisionEnviado: false,
-            estadoGestion: '', observacionesEmision: ''
+          confirmacionCliente: false, nuevaPolizaEmitida: false, fechaEmision: '', correoEmisionEnviado: false,
+          estadoGestion: '', observacionesEmision: ''
         }
-    };
+      };
 
-    Object.assign(datosEtapasRenovaciones["Contacto Inicial y Datos"], leadData);
-    activeDatosEtapas = datosEtapasRenovaciones;
-    currentLeadIndexInTable = table.row(tableData).index();
+      Object.assign(datosEtapasRenovaciones["Contacto Inicial y Datos"], leadData);
+      activeDatosEtapas = datosEtapasRenovaciones;
+      currentLeadIndexInTable = table.row(tableData).index();
 
-    const formatearMoneda = (valor) => {
+      const formatearMoneda = (valor) => {
         const valorNumerico = typeof valor === 'string' ? Number(valor.replace(/[^0-9.-]+/g, "")) : Number(valor) || 0;
         return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
+          style: 'currency',
+          currency: 'COP',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
         }).format(Math.round(valorNumerico));
-    };
+      };
 
 
-    var segmentoRaw = (leadData.segmento || leadData.Segmento || "SIN SEGMENTO").toString().toUpperCase();
-    
-    console.log("Segmento detectado:", segmentoRaw); 
+      var segmentoRaw = (leadData.segmento || leadData.Segmento || "SIN SEGMENTO").toString().toUpperCase();
 
-    var tipoGestion = "PROPIETARIO";
+      console.log("Segmento detectado:", segmentoRaw);
 
-    // 1. Prioridad: Si es explícitamente PROPIETARIO o SIN SEGMENTO, ignoramos lo demás.
-    if (segmentoRaw.includes("PROPIETARIO") || segmentoRaw.includes("SIN SEGMENTO")) {
+      var tipoGestion = "PROPIETARIO";
+
+      // 1. Prioridad: Si es explícitamente PROPIETARIO o SIN SEGMENTO, ignoramos lo demás.
+      if (segmentoRaw.includes("PROPIETARIO") || segmentoRaw.includes("SIN SEGMENTO")) {
         tipoGestion = "PROPIETARIO";
-    } 
-    // 2. Si NO es lo anterior, revisamos si es Broker o Inmobiliaria
-    else if (segmentoRaw.includes("BROKER")) {
+      }
+      // 2. Si NO es lo anterior, revisamos si es Broker o Inmobiliaria
+      else if (segmentoRaw.includes("BROKER")) {
         tipoGestion = "BROKER";
-    } 
-    else if (segmentoRaw.includes("INMOBILIARIA")) {
+      }
+      else if (segmentoRaw.includes("INMOBILIARIA")) {
         tipoGestion = "INMOBILIARIA";
-    }
+      }
 
-    // Telefono Fijo (siempre se carga igual)
+      // Telefono Fijo (siempre se carga igual)
 
-    if (tipoGestion === "BROKER" || tipoGestion === "INMOBILIARIA") {
+      if (tipoGestion === "BROKER" || tipoGestion === "INMOBILIARIA") {
         // --- CASO BROKER/INMOBILIARIA ---
         $("#cardBrokerContainer").removeClass("d-none");
         $("#lblTituloSegmento").text(tipoGestion === "BROKER" ? "Datos del Broker" : "Datos de la Inmobiliaria");
@@ -5034,14 +5060,14 @@ $(document).on("click", "#renovar", function () {
         $('#propietarioEmail').val(leadData.emailBrIn || '').trigger('change');
 
         $("#propietarioTelefono, #propietarioEmail").css({
-            "border-color": "#6f42c1",
-            "background-color": "#f8f9fa"
+          "border-color": "#6f42c1",
+          "background-color": "#f8f9fa"
         }).attr("title", "Datos del " + tipoGestion + " cargados automáticamente");
 
-    } else {
+      } else {
         // --- CASO PROPIETARIO (Default) ---
         $("#cardBrokerContainer").addClass("d-none");
-         $('#propietariotelfijo').val(leadData.telefono1 || '');
+        $('#propietariotelfijo').val(leadData.telefono1 || '');
 
 
         // Inputs de Gestión con datos del PROPIETARIO
@@ -5049,96 +5075,96 @@ $(document).on("click", "#renovar", function () {
         $('#propietarioEmail').val(leadData.email || '').trigger('change');
 
         $("#propietarioTelefono, #propietarioEmail").css({
-            "border-color": "",
-            "background-color": ""
+          "border-color": "",
+          "background-color": ""
         }).removeAttr("title");
-    }
+      }
 
-    const fechaVencimiento = formatearFechaSegura(leadData.vencimiento);
-    const dias = calcularDias(fechaVencimiento);
-    let textoDias;
+      const fechaVencimiento = formatearFechaSegura(leadData.vencimiento);
+      const dias = calcularDias(fechaVencimiento);
+      let textoDias;
 
-    if (dias === null) textoDias = 'N/A';
-    else if (dias > 0) textoDias = `Faltan ${dias} días`;
-    else if (dias < 0) textoDias = `Vencida hace ${Math.abs(dias)} días`;
-    else textoDias = 'Vence hoy';
+      if (dias === null) textoDias = 'N/A';
+      else if (dias > 0) textoDias = `Faltan ${dias} días`;
+      else if (dias < 0) textoDias = `Vencida hace ${Math.abs(dias)} días`;
+      else textoDias = 'Vence hoy';
 
-    $("#db_DIAS").text(textoDias);
+      $("#db_DIAS").text(textoDias);
 
-    // Poblar textos informativos (Precarga visual)
-    $("#db_ID").text(leadData.id || 'N/A');
-    $("#db_ASEGURADO").text(leadData.asegurado || 'N/A');
-    $("#db_INICIALES").text(leadData.asegurado ? leadData.asegurado.split(' ').map(n => n[0]).join('') : 'RPS');
-    $("#db_DOCUMENTO").text(leadData.documento || 'N/A');
-    $("#db_TIPO_DOCUMENTO").text(leadData.tipoDocumento || 'N/A');
-    $("#db_CORREO_ALTERNO").text(leadData.email || 'N/A');
-    $("#db_CELULAR").text(leadData.celular || 'N/A');
-    $("#db_TELEFONO1").text(leadData.telefono1 || 'N/A');
-    $("#db_POLIZA").text(leadData.poliza || 'N/A');
-    $("#db_SOLICITUD").text(leadData.solicitud || 'N/A');
-    $("#db_VIGENCIA").text(formatearFechaSegura(leadData.vigencia));
-    $("#db_VENCIMIENTO").text(formatearFechaSegura(leadData.vencimiento));
-    $("#db_NUM_RENOVACION").text(leadData.destinoInmueble || 'N/A');
-    $("#modalGestionRenovaciones #LeadInfoMesesRenovaciones").text(leadData.mesVencimientoPoliza || 'N/A');
+      // Poblar textos informativos (Precarga visual)
+      $("#db_ID").text(leadData.id || 'N/A');
+      $("#db_ASEGURADO").text(leadData.asegurado || 'N/A');
+      $("#db_INICIALES").text(leadData.asegurado ? leadData.asegurado.split(' ').map(n => n[0]).join('') : 'RPS');
+      $("#db_DOCUMENTO").text(leadData.documento || 'N/A');
+      $("#db_TIPO_DOCUMENTO").text(leadData.tipoDocumento || 'N/A');
+      $("#db_CORREO_ALTERNO").text(leadData.email || 'N/A');
+      $("#db_CELULAR").text(leadData.celular || 'N/A');
+      $("#db_TELEFONO1").text(leadData.telefono1 || 'N/A');
+      $("#db_POLIZA").text(leadData.poliza || 'N/A');
+      $("#db_SOLICITUD").text(leadData.solicitud || 'N/A');
+      $("#db_VIGENCIA").text(formatearFechaSegura(leadData.vigencia));
+      $("#db_VENCIMIENTO").text(formatearFechaSegura(leadData.vencimiento));
+      $("#db_NUM_RENOVACION").text(leadData.destinoInmueble || 'N/A');
+      $("#modalGestionRenovaciones #LeadInfoMesesRenovaciones").text(leadData.mesVencimientoPoliza || 'N/A');
 
-    $("#db_DIRECCION_RIESGO").text(leadData.direccionRiesgo || 'N/A');
-    $("#db_ADMON").text(formatearMoneda(leadData.admon) || 'N/A');
-    $("#db_VALOR_ASEG_SEP").text(formatearMoneda(leadData.valorAsegSep) || 'N/A');
-    $("#db_VALOR_ASEG_DYF").text(formatearMoneda(leadData.valorAsegDyf) || 'N/A');
-    $("#db_DESTINO_INMUEBLE").text(leadData.destinoInmueble || 'N/A');
-    $("#db_SEGMENTO").text(leadData.segmento || 'N/A');
-    $("#db_POLIZA_RENOVACION").text(leadData.PolizaRenovacion || 'N/A');
-    $("#db_MOTIVO_PARA_NO_RENOVACION").text(leadData.motivoNoRenovacion || 'N/A');
-    $("#db_SARLAFT").text(leadData.sarlaft || 'N/A');
-    $("#db_FECHA_ULTIMO_SARLAFT").text(formatearFechaSegura(leadData.fechaUltimoSarlaft));
-    $("#db_RENOVAR_SARLAFT").text(leadData.renovarSarlaft || 'N/A');
+      $("#db_DIRECCION_RIESGO").text(leadData.direccionRiesgo || 'N/A');
+      $("#db_ADMON").text(formatearMoneda(leadData.admon) || 'N/A');
+      $("#db_VALOR_ASEG_SEP").text(formatearMoneda(leadData.valorAsegSep) || 'N/A');
+      $("#db_VALOR_ASEG_DYF").text(formatearMoneda(leadData.valorAsegDyf) || 'N/A');
+      $("#db_DESTINO_INMUEBLE").text(leadData.destinoInmueble || 'N/A');
+      $("#db_SEGMENTO").text(leadData.segmento || 'N/A');
+      $("#db_POLIZA_RENOVACION").text(leadData.PolizaRenovacion || 'N/A');
+      $("#db_MOTIVO_PARA_NO_RENOVACION").text(leadData.motivoNoRenovacion || 'N/A');
+      $("#db_SARLAFT").text(leadData.sarlaft || 'N/A');
+      $("#db_FECHA_ULTIMO_SARLAFT").text(formatearFechaSegura(leadData.fechaUltimoSarlaft));
+      $("#db_RENOVAR_SARLAFT").text(leadData.renovarSarlaft || 'N/A');
 
-    $("#db_CANON_ACTUAL").text(formatearMoneda(leadData.canon));
-    $("#db_NUEVO_CANON_INFO").text(formatearMoneda(leadData.nuevoCanon));
+      $("#db_CANON_ACTUAL").text(formatearMoneda(leadData.canon));
+      $("#db_NUEVO_CANON_INFO").text(formatearMoneda(leadData.nuevoCanon));
 
-    $("#db_NUEVO_CANON").text(formatearMoneda(leadData.nuevoCanon));
-    $("#db_NUEVO_VALOR_ASEGURADO").text(formatearMoneda(leadData.nuevoValorAsegurado));
-    $("#db_VIGENCIA_N_POLIZA").text(leadData.vigenciaNPoliza || 'N/A');
-    $("#db_VENCIMIENTO_N_POLIZA").text(formatearFechaSegura(leadData.vencimientoNPoliza));
-    $("#db_COSTO").text(formatearMoneda(leadData.costo));
-    $("#db_VALOR_PAGADO").text(formatearMoneda(leadData.valorPagado));
-    $("#db_FECHA_DE_PAGO").text(formatearFechaSegura(leadData.fechaDePago));
-    $("#db_OBSERVACION_PAGOS").text(leadData.observacionPagos || 'N/A');
+      $("#db_NUEVO_CANON").text(formatearMoneda(leadData.nuevoCanon));
+      $("#db_NUEVO_VALOR_ASEGURADO").text(formatearMoneda(leadData.nuevoValorAsegurado));
+      $("#db_VIGENCIA_N_POLIZA").text(leadData.vigenciaNPoliza || 'N/A');
+      $("#db_VENCIMIENTO_N_POLIZA").text(formatearFechaSegura(leadData.vencimientoNPoliza));
+      $("#db_COSTO").text(formatearMoneda(leadData.costo));
+      $("#db_VALOR_PAGADO").text(formatearMoneda(leadData.valorPagado));
+      $("#db_FECHA_DE_PAGO").text(formatearFechaSegura(leadData.fechaDePago));
+      $("#db_OBSERVACION_PAGOS").text(leadData.observacionPagos || 'N/A');
 
-    $("#db_NUEVO_CANON_VALOR").text(formatearMoneda(leadData.nuevoCanon));
-    $("#db_NUEVO_VALOR_ASEGURADO").text(formatearMoneda(leadData.nuevoValorAsegurado));
-    $("#db_NUEVA_VIGENCIA").text(leadData.vigenciaNPoliza || 'N/A');
-    $("#db_NUEVO_VENCIMIENTO").text(leadData.vencimientoNPoliza || 'N/A');
+      $("#db_NUEVO_CANON_VALOR").text(formatearMoneda(leadData.nuevoCanon));
+      $("#db_NUEVO_VALOR_ASEGURADO").text(formatearMoneda(leadData.nuevoValorAsegurado));
+      $("#db_NUEVA_VIGENCIA").text(leadData.vigenciaNPoliza || 'N/A');
+      $("#db_NUEVO_VENCIMIENTO").text(leadData.vencimientoNPoliza || 'N/A');
 
-    // Inputs (values)
-    $("#db_NUEVO_CANON").val(leadData.nuevoCanon || '');
-    $("#db_NUEVO_VALOR_ASEGURADO").val(leadData.nuevoValorAsegurado || '');
-    $("#db_VIGENCIA_N_POLIZA").val(leadData.vigenciaNPoliza || '');
-    $("#db_VENCIMIENTO_N_POLIZA").val(leadData.vencimientoNPoliza || '');
-    $("#db_POLIZA_RENOVACION").val(leadData.PolizaRenovacion || '');
-    $("#db_SARLAFT").val(leadData.sarlaft || '');
-    $("#db_FECHA_ULTIMO_SARLAFT").val(formatearFechaSegura(leadData.fechaUltimoSarlaft));
-    $("#db_RENOVAR_SARLAFT").val(leadData.renovarSarlaft || '');
-    $("#db_MOTIVO_NO_RENOVACION_VALOR").text(leadData.motivoNoRenovacion || 'N/A');
-    $("#db_POLIZA_RENOVACION_VALOR").text(leadData.PolizaRenovacion || 'N/A');
-    $("#db_COSTO_VALOR").text(formatearMoneda(leadData.costo));
-    $("#db_VALOR_PAGADO_VALOR").text(formatearMoneda(leadData.valorPagado));
-    $("#db_FECHA_DE_PAGO_VALOR").text(formatearFechaSegura(leadData.fechaDePago));
-    $("#db_OBSERVACION_PAGOS_VALOR").text(leadData.observacionPagos || 'N/A');
+      // Inputs (values)
+      $("#db_NUEVO_CANON").val(leadData.nuevoCanon || '');
+      $("#db_NUEVO_VALOR_ASEGURADO").val(leadData.nuevoValorAsegurado || '');
+      $("#db_VIGENCIA_N_POLIZA").val(leadData.vigenciaNPoliza || '');
+      $("#db_VENCIMIENTO_N_POLIZA").val(leadData.vencimientoNPoliza || '');
+      $("#db_POLIZA_RENOVACION").val(leadData.PolizaRenovacion || '');
+      $("#db_SARLAFT").val(leadData.sarlaft || '');
+      $("#db_FECHA_ULTIMO_SARLAFT").val(formatearFechaSegura(leadData.fechaUltimoSarlaft));
+      $("#db_RENOVAR_SARLAFT").val(leadData.renovarSarlaft || '');
+      $("#db_MOTIVO_NO_RENOVACION_VALOR").text(leadData.motivoNoRenovacion || 'N/A');
+      $("#db_POLIZA_RENOVACION_VALOR").text(leadData.PolizaRenovacion || 'N/A');
+      $("#db_COSTO_VALOR").text(formatearMoneda(leadData.costo));
+      $("#db_VALOR_PAGADO_VALOR").text(formatearMoneda(leadData.valorPagado));
+      $("#db_FECHA_DE_PAGO_VALOR").text(formatearFechaSegura(leadData.fechaDePago));
+      $("#db_OBSERVACION_PAGOS_VALOR").text(leadData.observacionPagos || 'N/A');
 
-    const etapaNombresActual = ["Contacto Inicial y Datos", "Validaciones y Sarlaft", "Envio a Emision"];
-    const leadEtapa = leadData.etapaFunel || etapaNombresActual[0];
-    currentEtapaIndex = etapaNombresActual.indexOf(leadEtapa);
-    if (currentEtapaIndex === -1) currentEtapaIndex = 0;
+      const etapaNombresActual = ["Contacto Inicial y Datos", "Validaciones y Sarlaft", "Envio a Emision"];
+      const leadEtapa = leadData.etapaFunel || etapaNombresActual[0];
+      currentEtapaIndex = etapaNombresActual.indexOf(leadEtapa);
+      if (currentEtapaIndex === -1) currentEtapaIndex = 0;
 
-    leadActualEtapaGuardada = etapaNombresActual[currentEtapaIndex];
+      leadActualEtapaGuardada = etapaNombresActual[currentEtapaIndex];
 
-    renderEtapas(etapaNombresActual[currentEtapaIndex], '#modalGestionRenovaciones', etapaNombresActual);
-    cargarHistorial();
+      renderEtapas(etapaNombresActual[currentEtapaIndex], '#modalGestionRenovaciones', etapaNombresActual);
+      cargarHistorial();
 
-    $("#modalGestionRenovaciones").modal("show");
-    pintarHistorialObservaciones()
-});
+      $("#modalGestionRenovaciones").modal("show");
+      pintarHistorialObservaciones()
+    });
 
   function recalcularKPIs(data) {
     // CANDADO DE SEGURIDAD:
@@ -5156,9 +5182,6 @@ $(document).on("click", "#renovar", function () {
     $('.kpi-section-container').show();
     $('#seccionFiltros').show();
 
-    // Lógica normal de asignación de datos a los KPIs...
-    // (Tus asignaciones de texto se mantienen igual, aquí solo controlo visibilidad)
-
     if (data.expertise === "Seguro de Vida" || data.expertise === "Seguro de Desempleo") {
       $('#kpiVentas').show();
       $('#kpiRenovaciones').hide();
@@ -5166,7 +5189,6 @@ $(document).on("click", "#renovar", function () {
       $('#kpiVentas').hide();
       $('#kpiRenovaciones').show();
     } else {
-      // Si no hay expertise definido, ocultamos ambos por seguridad
       $('#kpiVentas').hide();
       $('#kpiRenovaciones').hide();
     }
@@ -5254,106 +5276,106 @@ $(document).on("click", "#renovar", function () {
 
 
     // Función para filtrar datos y recalcular KPIs
-function filtrarDatosYRecalcularKPIs() {
-    if (!originalDataSet || !table) return;
+    function filtrarDatosYRecalcularKPIs() {
+      if (!originalDataSet || !table) return;
 
-    const fechaDesde = $('#fechaDesde').val();
-    const fechaHasta = $('#fechaHasta').val();
-    const estado = $('#filtroEstado').val();
-    const periodo = $('#filtroPeriodo').val();
+      const fechaDesde = $('#fechaDesde').val();
+      const fechaHasta = $('#fechaHasta').val();
+      const estado = $('#filtroEstado').val();
+      const periodo = $('#filtroPeriodo').val();
 
-    // 1. Calcular fechas del período si está seleccionado (Lógica intacta)
-    let fechaPeriodoDesde = null;
-    let fechaPeriodoHasta = null;
+      // 1. Calcular fechas del período si está seleccionado (Lógica intacta)
+      let fechaPeriodoDesde = null;
+      let fechaPeriodoHasta = null;
 
-    if (periodo) {
+      if (periodo) {
         const hoy = new Date();
         switch (periodo) {
-            case 'hoy':
-                fechaPeriodoDesde = fechaPeriodoHasta = hoy.toISOString().split('T')[0];
-                break;
-            case 'semana':
-                const inicioSemana = new Date(hoy);
-                inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-                fechaPeriodoDesde = inicioSemana.toISOString().split('T')[0];
-                fechaPeriodoHasta = hoy.toISOString().split('T')[0];
-                break;
-            case 'mes':
-                const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-                fechaPeriodoDesde = inicioMes.toISOString().split('T')[0];
-                fechaPeriodoHasta = hoy.toISOString().split('T')[0];
-                break;
-            case 'trimestre':
-                const trimestreActual = Math.floor(hoy.getMonth() / 3);
-                const inicioTrimestre = new Date(hoy.getFullYear(), trimestreActual * 3, 1);
-                fechaPeriodoDesde = inicioTrimestre.toISOString().split('T')[0];
-                fechaPeriodoHasta = hoy.toISOString().split('T')[0];
-                break;
+          case 'hoy':
+            fechaPeriodoDesde = fechaPeriodoHasta = hoy.toISOString().split('T')[0];
+            break;
+          case 'semana':
+            const inicioSemana = new Date(hoy);
+            inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+            fechaPeriodoDesde = inicioSemana.toISOString().split('T')[0];
+            fechaPeriodoHasta = hoy.toISOString().split('T')[0];
+            break;
+          case 'mes':
+            const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+            fechaPeriodoDesde = inicioMes.toISOString().split('T')[0];
+            fechaPeriodoHasta = hoy.toISOString().split('T')[0];
+            break;
+          case 'trimestre':
+            const trimestreActual = Math.floor(hoy.getMonth() / 3);
+            const inicioTrimestre = new Date(hoy.getFullYear(), trimestreActual * 3, 1);
+            fechaPeriodoDesde = inicioTrimestre.toISOString().split('T')[0];
+            fechaPeriodoHasta = hoy.toISOString().split('T')[0];
+            break;
         }
-    }
+      }
 
-     const filtroFechaDesde = fechaPeriodoDesde || fechaDesde;
-    const filtroFechaHasta = fechaPeriodoHasta || fechaHasta;
+      const filtroFechaDesde = fechaPeriodoDesde || fechaDesde;
+      const filtroFechaHasta = fechaPeriodoHasta || fechaHasta;
 
-     const estadosTerminales = [
-        "Cliente No Renueva", 
-        "Desistido", 
-        "Poliza Renovada", 
-        "RENOVADA", 
-        "VENTA", 
+      const estadosTerminales = [
+        "Cliente No Renueva",
+        "Desistido",
+        "Poliza Renovada",
+        "RENOVADA",
+        "VENTA",
         "Renovacion Exitosa",
         "Confirmacion de venta"
-    ];
+      ];
 
-     const datosFiltrados = originalDataSet.filter(item => {
-        
- 
+      const datosFiltrados = originalDataSet.filter(item => {
+
+
         if (estado && item.estadoGestion !== estado) {
-            return false;
+          return false;
         }
- 
+
         if (!estado && (currentUserExpertise === "Renovations" || currentUserExpertise === "CorreccionesBI") && estadosTerminales.includes(item.estadoGestion)) {
-            return false;
+          return false;
         }
- 
+
         let fechaItem = null;
 
         if (currentUserExpertise === "Renovations" || currentUserExpertise === "CorreccionesBI") {
-             const vencimientoStr = item.leadData && item.leadData.vencimiento ? item.leadData.vencimiento : null;
-            if (vencimientoStr) {
-            
-                const fechaIso = convertirFechaParaInput(vencimientoStr); 
-                if(fechaIso) {
-                    fechaItem = new Date(fechaIso + 'T00:00:00');
-                }
+          const vencimientoStr = item.leadData && item.leadData.vencimiento ? item.leadData.vencimiento : null;
+          if (vencimientoStr) {
+
+            const fechaIso = convertirFechaParaInput(vencimientoStr);
+            if (fechaIso) {
+              fechaItem = new Date(fechaIso + 'T00:00:00');
             }
+          }
         } else {
-             if (item.fechaIngreso) {
-                fechaItem = parseFechaDDMMYYYY(item.fechaIngreso);
-            }
+          if (item.fechaIngreso) {
+            fechaItem = parseFechaDDMMYYYY(item.fechaIngreso);
+          }
         }
 
         // Si tenemos una fecha válida en el item, aplicamos los filtros de rango
         if (fechaItem) {
-            if (filtroFechaDesde) {
-                const fDesde = new Date(filtroFechaDesde + 'T00:00:00');
-                if (fechaItem < fDesde) return false;
-            }
-            if (filtroFechaHasta) {
-                const fHasta = new Date(filtroFechaHasta + 'T23:59:59.999');
-                if (fechaItem > fHasta) return false;
-            }
+          if (filtroFechaDesde) {
+            const fDesde = new Date(filtroFechaDesde + 'T00:00:00');
+            if (fechaItem < fDesde) return false;
+          }
+          if (filtroFechaHasta) {
+            const fHasta = new Date(filtroFechaHasta + 'T23:59:59.999');
+            if (fechaItem > fHasta) return false;
+          }
         }
 
         return true;
-    });
+      });
 
-    // 3. Actualizar tabla con datos filtrados
-    table.clear().rows.add(datosFiltrados).draw();
+      // 3. Actualizar tabla con datos filtrados
+      table.clear().rows.add(datosFiltrados).draw();
 
-    // 4. Recalcular KPIs basados en datos filtrados
-    recalcularKPIsDesdeDatosFiltrados(datosFiltrados);
-}
+      // 4. Recalcular KPIs basados en datos filtrados
+      recalcularKPIsDesdeDatosFiltrados(datosFiltrados);
+    }
 
     // Función para recalcular KPIs desde datos filtrados
     function recalcularKPIsDesdeDatosFiltrados(datosFiltrados) {
@@ -5404,7 +5426,7 @@ function filtrarDatosYRecalcularKPIs() {
       } else if (currentUserExpertise === "Renovations" || currentUserExpertise === "CorreccionesBI") {
         // KPIs de Renovaciones
         const totalPolizas = datosRenovaciones.length;
-        const porVencer = datosRenovaciones.filter(function(item) {
+        const porVencer = datosRenovaciones.filter(function (item) {
           var vencStr = item.leadData && item.leadData.vencimiento;
           if (!vencStr) return false;
           var fechaIso = convertirFechaParaInput(vencStr);
@@ -5414,7 +5436,7 @@ function filtrarDatosYRecalcularKPIs() {
           return fechaVencimiento.getMonth() === hoy.getMonth() && fechaVencimiento.getFullYear() === hoy.getFullYear();
         }).length;
 
-        const renovadas = datosRenovaciones.filter(function(item) {
+        const renovadas = datosRenovaciones.filter(function (item) {
           return item.estadoGestion === 'Expedido';
         }).length;
 
@@ -5624,10 +5646,10 @@ function filtrarDatosYRecalcularKPIs() {
     actualizarEstadoGestion('Procesando documento...', 'info');
 
     var reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
       var base64Data = e.target.result.split(',')[1];
       var progress = 0;
-      var interval = setInterval(function() {
+      var interval = setInterval(function () {
         progress += 5;
         $('#ai-progress-bar').css('width', progress + '%');
         if (progress < 90) {
@@ -5692,7 +5714,7 @@ function filtrarDatosYRecalcularKPIs() {
 
   function enmascararDocumento() {
     const real = $('#lblDocumentoMask').data('real').toString();
-     const masked = real.length > 4
+    const masked = real.length > 4
       ? '*** *** ' + real.slice(-4)
       : real;
 
@@ -5712,27 +5734,27 @@ function filtrarDatosYRecalcularKPIs() {
       documentoVisible = true;
     }
   }
- 
+
 
 
   function validarRespuestasNegativas() {
-        const fechaPazSalvo = $('#pazSalvoModalRenova').val();
-        $('#alertaRestriccion').addClass('hidden');
+    const fechaPazSalvo = $('#pazSalvoModalRenova').val();
+    $('#alertaRestriccion').addClass('hidden');
 
-        if (!fechaPazSalvo) {
-        $('#step-poliza').addClass('hidden');
-        $('#check-cumplimiento').prop('checked', false);
-        return false;
-    }else {
-        $('#step-cumplimiento').removeClass('hidden').addClass('fade-in-up');
-        $('#step-poliza').removeClass('hidden').addClass('fade-in-up');
-        $('#check-cumplimiento').prop('checked', true);
-        
-        $('html, body').animate({
-            scrollTop: $('#step-poliza').offset().top - 150
-        }, 500);
-        actualizarEstadoGestion('Paz y Salvo confirmado hasta: ' + fechaPazSalvo, 'success');
-        return true;
+    if (!fechaPazSalvo) {
+      $('#step-poliza').addClass('hidden');
+      $('#check-cumplimiento').prop('checked', false);
+      return false;
+    } else {
+      $('#step-cumplimiento').removeClass('hidden').addClass('fade-in-up');
+      $('#step-poliza').removeClass('hidden').addClass('fade-in-up');
+      $('#check-cumplimiento').prop('checked', true);
+
+      $('html, body').animate({
+        scrollTop: $('#step-poliza').offset().top - 150
+      }, 500);
+      actualizarEstadoGestion('Paz y Salvo confirmado hasta: ' + fechaPazSalvo, 'success');
+      return true;
     }
   }
   function mostrarPasoConAnimacion(selector) {
@@ -5745,7 +5767,7 @@ function filtrarDatosYRecalcularKPIs() {
 
 
   function continuarAOTP() {
-     const telefonoFijo = $('#propietariotelfijo').val().trim();
+    const telefonoFijo = $('#propietariotelfijo').val().trim();
     const telefono = $('#propietarioTelefono').val().trim();
     const correo = $('#propietarioEmail').val().trim();
 
@@ -5863,40 +5885,40 @@ function filtrarDatosYRecalcularKPIs() {
     $(elemento).addClass('selected');
     tipoPolizaSeleccionada = tipo;
 
-     $('#formularioNuevaPoliza').removeClass('hidden').addClass('fade-in-up');
-     let vencimientoAnterior = $('#db_VENCIMIENTO').text().trim();
+    $('#formularioNuevaPoliza').removeClass('hidden').addClass('fade-in-up');
+    let vencimientoAnterior = $('#db_VENCIMIENTO').text().trim();
     if ((!vencimientoAnterior || vencimientoAnterior === 'N/A') && currentLeadData) {
-        vencimientoAnterior = currentLeadData.leadData.vencimiento;
+      vencimientoAnterior = currentLeadData.leadData.vencimiento;
     }
     const fechaBaseISO = convertirFechaParaInput(vencimientoAnterior);
     let fechaInicioObj = new Date();
-    if(fechaBaseISO) {
-        const fechaVence = new Date(fechaBaseISO);
-        fechaInicioObj = new Date(fechaVence);
+    if (fechaBaseISO) {
+      const fechaVence = new Date(fechaBaseISO);
+      fechaInicioObj = new Date(fechaVence);
     }
     const fechaInicioStr = fechaInicioObj.toISOString().split('T')[0];
     $('#fechaInicioVigencia').val(fechaInicioStr);
 
-     inicializarCotizador();
+    inicializarCotizador();
 
     if (tipo === 'anterior') {
 
-        const vigenciaAntStr = currentLeadData.leadData.vigencia; 
-        const vencimientoAntStr = currentLeadData.leadData.vencimiento;
-        
-        const d1 = new Date(convertirFechaParaInput(vigenciaAntStr) + 'T00:00:00');
-        const d2 = new Date(convertirFechaParaInput(vencimientoAntStr) + 'T00:00:00');
-        const diffTime = Math.abs(d2 - d1);
-        
-        // Fecha Fin Nueva = Fecha Inicio Nueva + Duración Anterior
-        const fechaFinObj = new Date(fechaInicioObj.getTime() + diffTime);
-        const fechaFinStr = fechaFinObj.toISOString().split('T')[0];
+      const vigenciaAntStr = currentLeadData.leadData.vigencia;
+      const vencimientoAntStr = currentLeadData.leadData.vencimiento;
+
+      const d1 = new Date(convertirFechaParaInput(vigenciaAntStr) + 'T00:00:00');
+      const d2 = new Date(convertirFechaParaInput(vencimientoAntStr) + 'T00:00:00');
+      const diffTime = Math.abs(d2 - d1);
+
+      // Fecha Fin Nueva = Fecha Inicio Nueva + Duración Anterior
+      const fechaFinObj = new Date(fechaInicioObj.getTime() + diffTime);
+      const fechaFinStr = fechaFinObj.toISOString().split('T')[0];
 
       actualizarEstadoGestion('Renovación con Valores Anteriores - Seleccione Vigencia');
       $('#fechaFinVigencia').val(fechaFinStr);
 
       $('#fechaInicioVigencia').prop('readonly', true).addClass('bg-light');
-        $('#fechaFinVigencia').prop('readonly', true).addClass('bg-light'); 
+      $('#fechaFinVigencia').prop('readonly', true).addClass('bg-light');
 
       // MODO LECTURA: Bloqueamos inputs monetarios y de IPC
       $('#input_IPC').prop('disabled', true).val(0); // IPC 0 porque son valores viejos
@@ -5909,8 +5931,8 @@ function filtrarDatosYRecalcularKPIs() {
       $('#db_NUEVA_ADMINISTRACION').val($('#db_ADMON').text());
       $('#nuevosServicios').val($('#db_VALOR_ASEG_SEP').text());
       $('#nuevosDyF').val($('#db_VALOR_ASEG_DYF').text());
-      $('#db_IVACOMERCIAL').val('$0'); 
-      validarYCalcularFechas(); 
+      $('#db_IVACOMERCIAL').val('$0');
+      validarYCalcularFechas();
 
       calcularCotizacion();
 
@@ -5918,7 +5940,7 @@ function filtrarDatosYRecalcularKPIs() {
       // MODO EDICIÓN: Habilitamos todo
       actualizarEstadoGestion('Renovación Nueva - Ajuste valores y vigencia');
       $('#fechaInicioVigencia').prop('readonly', false).removeClass('bg-light');
-      $('#fechaFinVigencia').prop('readonly', false).removeClass('bg-light');  
+      $('#fechaFinVigencia').prop('readonly', false).removeClass('bg-light');
 
       $('#input_IPC').prop('disabled', false).val(5.1); // IPC Default
       $('.btn-ipc').prop('disabled', false);
@@ -6078,43 +6100,43 @@ function filtrarDatosYRecalcularKPIs() {
     let ipc = parseFloat($('#input_IPC').val()) || 0;
 
     // Validación Tope 6%
-   if (ipc > 5.2) {
-        if (!Swal.isVisible()) {
-            Swal.fire({
-                title: 'IPC Superior al Permitido',
-                html: `El incremento del <strong>${ipc}%</strong> supera el tope establecido del 5.2%.<br><br>` +
-                      `¿Deseas continuar con este valor como un <strong>Proceso Especial</strong> o prefieres corregirlo?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-exclamation-triangle me-2"></i>Usar como Proceso Especial',
-                cancelButtonText: '<i class="fas fa-edit me-2"></i>Corregir IPC',
-                confirmButtonColor: '#ffc107', 
-                cancelButtonColor: '#6c757d',
-                allowOutsideClick: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    if (typeof mostrarOtroSi === "function") {
-                        mostrarOtroSi(); 
-                    } else {
-                        $('#notasAnalista').focus();
-                        Swal.fire({
-                            toast: true,
-                            position: 'top-end',
-                            icon: 'info',
-                            title: 'Agrega la justificación en las notas del analista.',
-                            showConfirmButton: false,
-                            timer: 3000
-                        });
-                    }
-                } else {
-                    $('#input_IPC').val(5.1).focus();
-                    recalcularCanonPorIPC(); 
-                }
-            });
-        }
-        $('#input_IPC').addClass('text-danger is-invalid'); 
+    if (ipc > 5.2) {
+      if (!Swal.isVisible()) {
+        Swal.fire({
+          title: 'IPC Superior al Permitido',
+          html: `El incremento del <strong>${ipc}%</strong> supera el tope establecido del 5.2%.<br><br>` +
+            `¿Deseas continuar con este valor como un <strong>Proceso Especial</strong> o prefieres corregirlo?`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: '<i class="fas fa-exclamation-triangle me-2"></i>Usar como Proceso Especial',
+          cancelButtonText: '<i class="fas fa-edit me-2"></i>Corregir IPC',
+          confirmButtonColor: '#ffc107',
+          cancelButtonColor: '#6c757d',
+          allowOutsideClick: false
+        }).then((result) => {
+          if (result.isConfirmed) {
+            if (typeof mostrarOtroSi === "function") {
+              mostrarOtroSi();
+            } else {
+              $('#notasAnalista').focus();
+              Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'info',
+                title: 'Agrega la justificación en las notas del analista.',
+                showConfirmButton: false,
+                timer: 3000
+              });
+            }
+          } else {
+            $('#input_IPC').val(5.1).focus();
+            recalcularCanonPorIPC();
+          }
+        });
+      }
+      $('#input_IPC').addClass('text-danger is-invalid');
     } else {
-        $('#input_IPC').removeClass('text-danger is-invalid'); 
+      $('#input_IPC').removeClass('text-danger is-invalid');
     }
 
     // CÁLCULO DEL NUEVO CANON (Solo Canon)
@@ -6194,57 +6216,57 @@ function filtrarDatosYRecalcularKPIs() {
     }
   }
 
-function calcularCotizacion() {
+  function calcularCotizacion() {
     if (!$('#alertaVigencia').hasClass('hidden')) return;
 
     // 1. Obtener tipo de servicio (Vivienda/Comercio)
-    const tipoServ = $('#tipoServicio').val(); 
+    const tipoServ = $('#tipoServicio').val();
 
     // 2. Lógica de visibilidad del IVA Comercial (HU-12)
     if (tipoServ === 'COMERCIO') {
-        $('#db_IVACOMERCIAL').closest('.mb-3').show(); 
+      $('#db_IVACOMERCIAL').closest('.mb-3').show();
     } else {
-        $('#db_IVACOMERCIAL').closest('.mb-3').hide();
-        $('#db_IVACOMERCIAL').val('$0'); 
+      $('#db_IVACOMERCIAL').closest('.mb-3').hide();
+      $('#db_IVACOMERCIAL').val('$0');
     }
 
     // A. Inputs
     const valCanonSolo = parsearMoneda($('#db_NUEVO_CANON_SOLO').val()) || 0;
     const valAdmon = parsearMoneda($('#db_NUEVA_ADMINISTRACION').val()) || 0;
-    const valIvaComercial = parsearMoneda($('#db_IVACOMERCIAL').val()) || 0; 
-    
+    const valIvaComercial = parsearMoneda($('#db_IVACOMERCIAL').val()) || 0;
+
     // Base Asegurable: Canon + Admon + IVA Comercial (Correctamente sumado aquí)
     const valCanonAdmon = valCanonSolo + valAdmon + valIvaComercial;
-    
+
     const valServicios = parsearMoneda($('#nuevosServicios').val()) || 0;
     const valDyF = parsearMoneda($('#nuevosDyF').val()) || 0;
-    
+
     const meses = $('#formularioNuevaPoliza').data('meses-calculados') || 12;
 
     // B. CÁLCULOS
 
     // --- 1. CANON ---
-    const aseguradoCanon = valCanonAdmon * meses; 
+    const aseguradoCanon = valCanonAdmon * meses;
     const primaNetaCanon = aseguradoCanon * TASA_CANON;
     const ivaCanon = primaNetaCanon * IVA;
-    
+
     // Total Canon = Prima + IVA de prima (El IVA Comercial ya está en la base, no se suma doble)
-    const totalCanon = primaNetaCanon + ivaCanon; 
+    const totalCanon = primaNetaCanon + ivaCanon;
 
     // --- 2. SERVICIOS PÚBLICOS (CORRECCIÓN DE RAÍZ) ---
     let primaNetaServ = 0;
     let baseServicios = 0;
-    
+
     // Aplicar obsequios (Deducibles)
     if (tipoServ === 'VIVIENDA') {
-        baseServicios = Math.max(0, valServicios - 1000000); 
+      baseServicios = Math.max(0, valServicios - 1000000);
     } else {
-        baseServicios = Math.max(0, valServicios - 2000000); 
+      baseServicios = Math.max(0, valServicios - 2000000);
     }
-    
+
     // Calcular prima usando SIEMPRE la Tasa Unificada del 5%
     if (baseServicios > 0) {
-        primaNetaServ = baseServicios * TASA_SERV_UNIFICADA; 
+      primaNetaServ = baseServicios * TASA_SERV_UNIFICADA;
     }
 
     const ivaServ = primaNetaServ * IVA;
@@ -6256,30 +6278,30 @@ function calcularCotizacion() {
     let totalDyF = 0;
 
     if (valDyF > 0) {
-        if (valDyF < MIN_DYF) {
-             $('#nuevosDyF').addClass('is-invalid'); 
-             $('#card_total_dyf').text("Mín $1M").addClass('text-danger');
-        } else {
-             $('#nuevosDyF').removeClass('is-invalid');
-             const aseguradoDyF = valDyF;
-             primaNetaDyF = aseguradoDyF * TASA_DYF; 
-             ivaDyF = primaNetaDyF * IVA;
-             totalDyF = primaNetaDyF + ivaDyF;
-        }
-    } else {
+      if (valDyF < MIN_DYF) {
+        $('#nuevosDyF').addClass('is-invalid');
+        $('#card_total_dyf').text("Mín $1M").addClass('text-danger');
+      } else {
         $('#nuevosDyF').removeClass('is-invalid');
+        const aseguradoDyF = valDyF;
+        primaNetaDyF = aseguradoDyF * TASA_DYF;
+        ivaDyF = primaNetaDyF * IVA;
+        totalDyF = primaNetaDyF + ivaDyF;
+      }
+    } else {
+      $('#nuevosDyF').removeClass('is-invalid');
     }
 
     // C. ACTUALIZACIÓN UI
 
     // Tarjeta Canon
-    $('#card_base_total').text(formatearMoneda(valCanonAdmon)); 
+    $('#card_base_total').text(formatearMoneda(valCanonAdmon));
     $('#card_prima_canon').text(formatearMoneda(Math.round(primaNetaCanon)));
     $('#card_iva_canon').text(formatearMoneda(Math.round(ivaCanon)));
-    $('#card_total_canon').text(formatearMoneda(Math.round(totalCanon))); 
- 
+    $('#card_total_canon').text(formatearMoneda(Math.round(totalCanon)));
+
     const textoTasaFija = (TASA_SERV_UNIFICADA * 100).toFixed(2) + '%';
-    
+
     $('#card_tasa_serv').text(textoTasaFija).removeClass('text-danger').addClass('text-dark');
     $('#card_prima_serv').text(formatearMoneda(Math.round(primaNetaServ)));
     $('#card_iva_serv').text(formatearMoneda(Math.round(ivaServ)));
@@ -6287,9 +6309,9 @@ function calcularCotizacion() {
 
     // Tarjeta DyF
     if (valDyF >= MIN_DYF || valDyF === 0) {
-        $('#card_prima_dyf').text(formatearMoneda(Math.round(primaNetaDyF)));
-        $('#card_iva_dyf').text(formatearMoneda(Math.round(ivaDyF)));
-        $('#card_total_dyf').text(formatearMoneda(Math.round(totalDyF))).removeClass('text-danger');
+      $('#card_prima_dyf').text(formatearMoneda(Math.round(primaNetaDyF)));
+      $('#card_iva_dyf').text(formatearMoneda(Math.round(ivaDyF)));
+      $('#card_total_dyf').text(formatearMoneda(Math.round(totalDyF))).removeClass('text-danger');
     }
 
     // Total Final
@@ -6297,14 +6319,32 @@ function calcularCotizacion() {
     $('#cotizacionTotalFooter').text(formatearMoneda(Math.round(granTotal)));
 
     if (granTotal > 0 && !(valDyF > 0 && valDyF < MIN_DYF)) {
-        $('#check-poliza').prop('checked', true);
+      $('#check-poliza').prop('checked', true);
     } else {
-        $('#check-poliza').prop('checked', false);
+      $('#check-poliza').prop('checked', false);
     }
-}
+  }
+  /**
+   * Muestra la sección de procesos especiales con las 3 cards visibles.
+   * Oculta TODOS los pasos del flujo normal porque son mutuamente excluyentes.
+   */
+  function mostrarProcesosEspeciales() {
+    // Ocultar TODOS los pasos del flujo normal
+    $('#step-propietario, #step-sarlaft, #step-cumplimiento, #step-poliza, #step-otp').addClass('hidden');
+    // Mostrar solo procesos especiales
+    $('#step-procesos-especiales').removeClass('hidden').addClass('fade-in-up');
+    // Reset: no pre-seleccionar ningún proceso
+    $('.proceso-especial-card').removeClass('selected');
+    $('#formProcesoEspecial').addClass('hidden');
+    procesoEspecialSeleccionado = null;
+    actualizarEstadoGestion('Seleccione el tipo de proceso especial', 'info');
+    $('html, body').animate({
+      scrollTop: $('#step-procesos-especiales').offset().top - 100
+    }, 500);
+  }
+
   function mostrarOtroSi() {
-    // Ocultar otros pasos y mostrar procesos especiales
-    $('#step-sarlaft, #step-poliza, #step-otp, #step-cumplimiento').addClass('hidden');
+    $('#step-propietario, #step-sarlaft, #step-cumplimiento, #step-poliza, #step-otp').addClass('hidden');
     $('#step-procesos-especiales').removeClass('hidden').addClass('fade-in-up');
     seleccionarProceso('otroSi');
     actualizarEstadoGestion('Gestionando Otro Sí del contrato', 'info');
@@ -6314,10 +6354,7 @@ function calcularCotizacion() {
   }
 
   function mostrarCesion() {
-    // Ocultar todos los pasos
-    $('#step-sarlaft, #step-procesos-especiales, #step-poliza, #step-propietario, #step-otp').addClass('hidden');
-    $('#step-sarlaft, #step-poliza, #step-propietario, #step-otp, #step-cumplimiento').addClass('hidden');
-    // Mostrar procesos especiales
+    $('#step-propietario, #step-sarlaft, #step-cumplimiento, #step-poliza, #step-otp').addClass('hidden');
     $('#step-procesos-especiales').removeClass('hidden').addClass('fade-in-up');
     seleccionarProceso('cesion');
     actualizarEstadoGestion('Gestionando Cesión de Contrato', 'info');
@@ -6328,95 +6365,279 @@ function calcularCotizacion() {
 
   function seleccionarProceso(tipo) {
     $('.proceso-especial-card').removeClass('selected');
-    $('#formOtroSi, #formCesion').addClass('hidden');
+    $('#formProcesoEspecial').addClass('hidden');
 
-    if (tipo === 'otroSi') {
-      $('#cardOtroSi').addClass('selected');
-      $('#formOtroSi').removeClass('hidden').addClass('fade-in-up');
-      procesoEspecialSeleccionado = 'OTRO_SI';
-    } else if (tipo === 'cesion') {
-      $('#cardCesion').addClass('selected');
-      $('#formCesion').removeClass('hidden').addClass('fade-in-up');
-      procesoEspecialSeleccionado = 'CESION';
+    const tipoMap = {
+      'otroSi': { key: 'OTRO_SI', label: 'Otro Sí' },
+      'cesion': { key: 'CESION', label: 'Cesión del Contrato' },
+      'correcciones': { key: 'CORRECCION', label: 'Correcciones' }
+    };
+
+    const config = tipoMap[tipo];
+    if (!config) return;
+
+    $(`#card${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`).addClass('selected');
+    procesoEspecialSeleccionado = config.key;
+
+    $('#formProcesoEspecial').removeClass('hidden').addClass('fade-in-up');
+    $('#tituloProcesoEspecial').text(`Gestión de ${config.label}`);
+    $('#observacionesProceso').val('');
+    $('#contadorObservaciones').text('0');
+    archivosSeleccionados = [];
+    initMultiFileUpload('multiFileUploadContainer');
+
+    actualizarEstadoGestion(`Proceso ${config.label} seleccionado`, 'info');
+  }
+
+  /**
+   * Actualiza el contador de caracteres del textarea de observaciones.
+   * Se invoca en el evento oninput del textarea #observacionesProceso.
+   */
+  function actualizarContadorObservaciones() {
+    const textarea = document.getElementById('observacionesProceso');
+    const contador = document.getElementById('contadorObservaciones');
+    if (textarea && contador) {
+      contador.textContent = textarea.value.length;
     }
-
-    actualizarEstadoGestion(`Proceso ${tipo === 'otroSi' ? 'Otro Sí' : 'Cesión'} seleccionado`, 'info');
   }
 
 
-  function handleOtroSiFileUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
+  /**
+   * Inicializa el componente de carga múltiple de archivos.
+   * Renderiza el área de drop/selección y la lista de archivos dentro del contenedor indicado.
+   * @param {string} containerId - ID del contenedor HTML donde se renderiza el componente.
+   */
+  function initMultiFileUpload(containerId) {
+    const $container = $(`#${containerId}`);
+    if (!$container.length) return;
 
-    if (file.type !== 'application/pdf') {
-      Swal.fire('Error', 'Solo se permiten archivos PDF', 'error');
-      input.value = '';
-      return;
-    }
+    archivosSeleccionados = [];
 
-    if (file.size > 15 * 1024 * 1024) {
-      Swal.fire('Error', 'El archivo no puede superar 15MB', 'error');
-      input.value = '';
-      return;
-    }
+    const html = `
+      <div class="multi-file-upload-area" id="multiFileDropZone">
+        <div class="text-center p-3" style="border: 2px dashed #ccc; border-radius: 8px; cursor: pointer; background: #fafafa;">
+          <i class="bi bi-cloud-arrow-up" style="font-size: 2rem; color: #673ab7;"></i>
+          <p class="mb-1 fw-semibold">Arrastra archivos aquí o haz clic para seleccionar</p>
+          <p class="text-muted small mb-0">Formatos: PDF, JPG, PNG — Máx. 15 MB por archivo — Máx. 10 archivos</p>
+          <input type="file" id="multiFileInput" multiple accept=".pdf,.jpg,.jpeg,.png" class="d-none">
+        </div>
+      </div>
+      <div id="multiFileContador" class="mt-2 small text-muted"></div>
+      <div id="multiFileList" class="mt-2"></div>
+    `;
 
-    archivosSubidos.otroSi = file;
-    mostrarVistaPrevia('otroSi', file);
+    $container.html(html);
+    renderizarListaArchivos();
 
-    subirArchivoADrive(file, 'OTROSI')
-      .then(url => {
-        $('#db_OTROSI_FILE_URL').val(url);
-        actualizarEstadoGestion('Contrato Otro Sí cargado', 'success');
-      })
-      .catch(error => {
-        Swal.fire('Error', 'Error al subir: ' + error, 'error');
-        input.value = '';
-        archivosSubidos.otroSi = null;
+    const $dropZone = $('#multiFileDropZone');
+    const $fileInput = $('#multiFileInput');
+
+    $dropZone.on('click', function (e) {
+      if ($(e.target).is('input[type="file"]')) return;
+      $fileInput[0].click();
+    });
+
+    $fileInput.on('change', function () {
+      if (this.files && this.files.length > 0) {
+        agregarArchivos(this.files);
+        this.value = '';
+      }
+    });
+
+    $dropZone.on('dragover', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      $(this).find('.text-center').css('border-color', '#673ab7');
+    });
+
+    $dropZone.on('dragleave', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      $(this).find('.text-center').css('border-color', '#ccc');
+    });
+
+    $dropZone.on('drop', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      $(this).find('.text-center').css('border-color', '#ccc');
+      if (e.originalEvent.dataTransfer && e.originalEvent.dataTransfer.files.length > 0) {
+        agregarArchivos(e.originalEvent.dataTransfer.files);
+      }
+    });
+  }
+
+
+  /**
+   * Agrega archivos al listado validando tipo MIME, tamaño y cantidad máxima.
+   * Muestra mensajes de error con SweetAlert2 si alguna validación falla.
+   * @param {FileList} files - Archivos seleccionados por el usuario.
+   * @returns {boolean} true si todos los archivos fueron aceptados, false si alguno fue rechazado.
+   */
+  function agregarArchivos(files) {
+    const archivosNuevos = Array.from(files);
+    let rechazados = [];
+    let aceptados = [];
+
+    const espacioDisponible = PROCESO_ESPECIAL_CONFIG.MAX_ARCHIVOS - archivosSeleccionados.length;
+
+    if (archivosNuevos.length > espacioDisponible) {
+      const excedentes = archivosNuevos.length - espacioDisponible;
+      Swal.fire({
+        icon: 'warning',
+        title: 'Límite de archivos',
+        text: `Máximo ${PROCESO_ESPECIAL_CONFIG.MAX_ARCHIVOS} documentos permitidos. Se rechazaron ${excedentes} archivo(s).`,
+        confirmButtonColor: '#673ab7'
       });
-  }
-
-
-  function handleCesionDocAdicionalUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    if (file.type !== 'application/pdf') {
-      Swal.fire('Error', 'Solo se permiten archivos PDF', 'error');
-      input.value = '';
-      return;
+      archivosNuevos.splice(espacioDisponible);
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      Swal.fire('Error', 'El archivo no puede superar 10MB', 'error');
-      input.value = '';
-      return;
-    }
+    for (const file of archivosNuevos) {
+      if (!PROCESO_ESPECIAL_CONFIG.FORMATOS_PERMITIDOS.includes(file.type)) {
+        rechazados.push({ name: file.name, reason: 'formato' });
+        continue;
+      }
 
-    archivosSubidos.cesionDocAdicional = file;
-    mostrarVistaPrevia('cesionDocAdicional', file);
+      if (file.size > PROCESO_ESPECIAL_CONFIG.MAX_SIZE_BYTES) {
+        rechazados.push({ name: file.name, reason: 'tamaño' });
+        continue;
+      }
 
-    subirArchivoADrive(file, 'CESION_DOC_ADICIONAL')
-      .then(url => {
-        $('#db_CESION_DOC_ADICIONAL_URL').val(url);
-        actualizarEstadoGestion('Documento adicional cargado', 'success');
-      })
-      .catch(error => {
-        Swal.fire('Error', 'Error al subir: ' + error, 'error');
-        input.value = '';
-        archivosSubidos.cesionDocAdicional = null;
+      aceptados.push({
+        file: file,
+        name: file.name.length > 50 ? file.name.substring(0, 47) + '...' : file.name,
+        fullName: file.name,
+        size: file.size,
+        sizeDisplay: formatearTamanoArchivo(file.size),
+        mimeType: file.type
       });
+    }
+
+    if (rechazados.length > 0) {
+      const porFormato = rechazados.filter(r => r.reason === 'formato');
+      const porTamano = rechazados.filter(r => r.reason === 'tamaño');
+      let mensaje = '';
+
+      if (porFormato.length > 0) {
+        mensaje += `Formato no permitido. Solo se aceptan: PDF, JPG, PNG.\n`;
+      }
+      if (porTamano.length > 0) {
+        mensaje += `El archivo excede el tamaño máximo de 15 MB.`;
+      }
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Archivos rechazados',
+        text: mensaje.trim(),
+        confirmButtonColor: '#673ab7'
+      });
+    }
+
+    archivosSeleccionados = archivosSeleccionados.concat(aceptados);
+    renderizarListaArchivos();
+
+    return rechazados.length === 0;
   }
 
 
-  function mostrarCamposCesion() {
-    const tipoDoc = $('#cesionTipoDoc').val();
-
-    if (tipoDoc === 'NIT') {
-      $('#cesionDocumentoAdicional').removeClass('hidden');
-      $('#labelDocAdicional').text('RUT y Cámara de Comercio');
-    } else if (tipoDoc === 'CC' || tipoDoc === 'CE') {
-      $('#cesionDocumentoAdicional').addClass('hidden');
+  /**
+   * Elimina un archivo del listado por su índice y actualiza la interfaz.
+   * @param {number} index - Índice del archivo a eliminar del arreglo archivosSeleccionados.
+   */
+  function eliminarArchivo(index) {
+    if (index >= 0 && index < archivosSeleccionados.length) {
+      archivosSeleccionados.splice(index, 1);
+      renderizarListaArchivos();
     }
+  }
+
+
+  /**
+   * Renderiza la lista de archivos seleccionados mostrando nombre truncado (50 chars),
+   * tamaño formateado (KB/MB) y botón de eliminar por cada archivo.
+   */
+  function renderizarListaArchivos() {
+    const $list = $('#multiFileList');
+    const $contador = $('#multiFileContador');
+
+    if (!$list.length) return;
+
+    $contador.text(`${archivosSeleccionados.length} / ${PROCESO_ESPECIAL_CONFIG.MAX_ARCHIVOS} archivos seleccionados`);
+
+    if (archivosSeleccionados.length === 0) {
+      $list.html('');
+      return;
+    }
+
+    let html = '<ul class="list-group">';
+    archivosSeleccionados.forEach(function (archivo, index) {
+      html += `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div class="text-truncate me-2" style="max-width: 60%;" title="${archivo.fullName}">
+            <i class="bi bi-file-earmark me-1"></i>${archivo.name}
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="badge bg-secondary me-2">${archivo.sizeDisplay}</span>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-archivo" data-index="${index}" title="Eliminar archivo">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </li>
+      `;
+    });
+    html += '</ul>';
+
+    $list.html(html);
+
+    $list.find('.btn-eliminar-archivo').on('click', function () {
+      const idx = parseInt($(this).data('index'), 10);
+      eliminarArchivo(idx);
+    });
+  }
+
+
+  /**
+   * Formatea el tamaño de un archivo en bytes a una representación legible (KB o MB).
+   * @param {number} bytes - Tamaño del archivo en bytes.
+   * @returns {string} Tamaño formateado con unidad (KB o MB), máximo 2 decimales.
+   */
+  function formatearTamanoArchivo(bytes) {
+    if (bytes >= 1024 * 1024) {
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+    return (bytes / 1024).toFixed(2) + ' KB';
+  }
+
+
+  /**
+   * Convierte todos los archivos seleccionados a base64 usando FileReader.
+   * NO utiliza URL.createObjectURL.
+   * @returns {Promise<Array<{name: string, mimeType: string, data: string}>>} Arreglo de objetos con nombre, tipo MIME y datos en base64 (sin prefijo data:).
+   */
+  async function convertirArchivosABase64() {
+    const resultados = [];
+
+    for (const archivo of archivosSeleccionados) {
+      const base64Data = await new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const dataUrl = e.target.result;
+          const base64 = dataUrl.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = function () {
+          reject(new Error(`Error al procesar el archivo ${archivo.fullName}. Intente nuevamente.`));
+        };
+        reader.readAsDataURL(archivo.file);
+      });
+
+      resultados.push({
+        name: archivo.fullName,
+        mimeType: archivo.mimeType,
+        data: base64Data
+      });
+    }
+
+    return resultados;
   }
 
 
@@ -6451,10 +6672,7 @@ function calcularCotizacion() {
 
   function configurarDragAndDrop() {
     const areas = [
-      { selector: '#sarlaftUploadArea', input: '#sarlaftFileInput' },
-      { selector: '#otroSiUploadArea', input: '#otroSiFileInput' },
-      { selector: '#cesionCedulaUploadArea', input: '#cesionCedulaInput' },
-      { selector: '#cesionDocAdicionalUploadArea', input: '#cesionDocAdicionalInput' }
+      { selector: '#sarlaftUploadArea', input: '#sarlaftFileInput' }
     ];
 
     areas.forEach(area => {
@@ -6656,35 +6874,6 @@ function calcularCotizacion() {
     }, 500);
   }
 
-  // // PASO 3: VALIDACIÓN OTP
-  // function enviarOTP(metodo) {
-  //   Swal.fire({
-  //     title: 'Enviando código...',
-  //     html: 'Por favor espere',
-  //     allowOutsideClick: false,
-  //     didOpen: () => {
-  //       Swal.showLoading();
-  //     }
-  //   });
-
-  //   codigoOTPGenerado = Math.floor(100000 + Math.random() * 900000).toString();
-  //   console.log('Código OTP generado:', codigoOTPGenerado); // Para pruebas
-
-  //    setTimeout(() => {
-  //     otpEnviado = true;
-  //     $('#envioOTP').addClass('hidden');
-  //     $('#validacionOTP').removeClass('hidden');
-
-  //     Swal.fire({
-  //       title: '✓ Código Enviado',
-  //       html: `El cliente ha recibido el código por <strong>${metodo.toUpperCase()}</strong><br><small class="text-muted">(Código: ${codigoOTPGenerado} - solo para pruebas)</small>`,
-  //       icon: 'success',
-  //       confirmButtonText: 'Entendido'
-  //     });
-
-  //     actualizarEstadoGestion('Código OTP enviado - Esperando validación');
-  //   }, 2000);
-  // }
 
   function obtenerDestinatarioOTP() {
     var segmento = '';
@@ -6693,8 +6882,8 @@ function calcularCotizacion() {
     }
     // Siempre leer de los inputs del paso 1 (datos actualizados por el asesor)
     var telefono = ($('#propietarioTelefono').val() || '').trim();
-    var email    = ($('#propietarioEmail').val()    || '').trim();
-    var nombre   = '';
+    var email = ($('#propietarioEmail').val() || '').trim();
+    var nombre = '';
 
     if (segmento.includes('BROKER') || segmento.includes('INMOBILIARIA')) {
       nombre = ($('#br_Nombre').text() || '').trim();
@@ -6707,7 +6896,7 @@ function calcularCotizacion() {
   // ── ENVIAR OTP ─────────────────────────────────────────────────────────────
 
   function enviarOTP(metodo) {
-    var dest        = obtenerDestinatarioOTP();
+    var dest = obtenerDestinatarioOTP();
     var esBrokerInm = dest.segmento.includes('BROKER') || dest.segmento.includes('INMOBILIARIA');
 
     // Determinar destino para mostrar en confirmación
@@ -6718,7 +6907,7 @@ function calcularCotizacion() {
       if (!dest.telefono) {
         Swal.fire('Error',
           esBrokerInm ? 'No se encontro telefono del ' + dest.segmento + '.'
-                      : 'No se encontro un numero de celular para enviar el OTP.',
+            : 'No se encontro un numero de celular para enviar el OTP.',
           'warning');
         return;
       }
@@ -6727,7 +6916,7 @@ function calcularCotizacion() {
       if (!dest.email) {
         Swal.fire('Error',
           esBrokerInm ? 'No se encontro correo del ' + dest.segmento + '.'
-                      : 'No se encontro un correo electronico para enviar el OTP.',
+            : 'No se encontro un correo electronico para enviar el OTP.',
           'warning');
         return;
       }
@@ -6738,18 +6927,18 @@ function calcularCotizacion() {
     Swal.fire({
       title: 'Confirmar Envío de OTP',
       html: '<p>Se enviará el código de verificación por <strong>' + metodo + '</strong> a:</p>' +
-            '<div class="alert alert-info text-start mt-2">' +
-            '<strong>' + tipoContacto + ':</strong> ' + dest.nombre + '<br>' +
-            '<strong>Destino:</strong> ' + destinoTexto +
-            '</div>' +
-            '<p class="text-muted small">¿Desea continuar?</p>',
+        '<div class="alert alert-info text-start mt-2">' +
+        '<strong>' + tipoContacto + ':</strong> ' + dest.nombre + '<br>' +
+        '<strong>Destino:</strong> ' + destinoTexto +
+        '</div>' +
+        '<p class="text-muted small">¿Desea continuar?</p>',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Sí, enviar',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#673ab7',
       cancelButtonColor: '#6c757d'
-    }).then(function(result) {
+    }).then(function (result) {
       if (result.isConfirmed) {
         ejecutarEnvioOTP(metodo, dest, esBrokerInm);
       }
@@ -6767,18 +6956,18 @@ function calcularCotizacion() {
         title: 'Enviando codigo...',
         html: 'Conectando con WhatsApp...',
         allowOutsideClick: false,
-        didOpen: function() { Swal.showLoading(); }
+        didOpen: function () { Swal.showLoading(); }
       });
 
       google.script.run
-        .withSuccessHandler(function(response) {
+        .withSuccessHandler(function (response) {
           if (response.success) {
-            otpEnviado            = true;
-            otpMetodoEnviado      = 'WhatsApp';
+            otpEnviado = true;
+            otpMetodoEnviado = 'WhatsApp';
             otpIdentificadorEnviado = telefonoLimpio;
             $('#envioOTP').addClass('hidden');
             $('#validacionOTP').removeClass('hidden');
-            setTimeout(function() { $('#otp1').focus(); }, 500);
+            setTimeout(function () { $('#otp1').focus(); }, 500);
             var label = esBrokerInm ? dest.nombre + ' (' + dest.telefono + ')' : dest.telefono;
             Swal.fire({
               title: 'Codigo Enviado',
@@ -6791,30 +6980,30 @@ function calcularCotizacion() {
             Swal.fire('Error', 'No se pudo enviar el mensaje de WhatsApp. Intente nuevamente.', 'error');
           }
         })
-        .withFailureHandler(function(error) {
+        .withFailureHandler(function (error) {
           Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
         })
         .enviarOtpWhatsapp(telefonoLimpio);
 
-    // ── Rama Email ─────────────────────────────────────────────────────────
+      // ── Rama Email ─────────────────────────────────────────────────────────
     } else if (metodo === 'email' || metodo === 'Email') {
 
       Swal.fire({
         title: 'Enviando codigo...',
         html: 'Enviando correo electronico...',
         allowOutsideClick: false,
-        didOpen: function() { Swal.showLoading(); }
+        didOpen: function () { Swal.showLoading(); }
       });
 
       google.script.run
-        .withSuccessHandler(function(response) {
+        .withSuccessHandler(function (response) {
           if (response.success) {
-            otpEnviado            = true;
-            otpMetodoEnviado      = 'email';
+            otpEnviado = true;
+            otpMetodoEnviado = 'email';
             otpIdentificadorEnviado = dest.email;
             $('#envioOTP').addClass('hidden');
             $('#validacionOTP').removeClass('hidden');
-            setTimeout(function() { $('#otp1').focus(); }, 500);
+            setTimeout(function () { $('#otp1').focus(); }, 500);
             var label = esBrokerInm ? dest.nombre + ' (' + dest.email + ')' : dest.email;
             Swal.fire({
               title: 'Codigo Enviado',
@@ -6827,7 +7016,7 @@ function calcularCotizacion() {
             Swal.fire('Error', response.error || 'No se pudo enviar el correo.', 'error');
           }
         })
-        .withFailureHandler(function(error) {
+        .withFailureHandler(function (error) {
           Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
         })
         .enviarOtpEmail(dest.email);
@@ -6847,7 +7036,7 @@ function calcularCotizacion() {
 
   function validarOTP() {
     var otp = $('#otp1').val() + $('#otp2').val() + $('#otp3').val() +
-              $('#otp4').val() + $('#otp5').val() + $('#otp6').val();
+      $('#otp4').val() + $('#otp5').val() + $('#otp6').val();
 
     if (otp.length !== 6) {
       Swal.fire('Error', 'Ingrese el codigo completo de 6 digitos', 'warning');
@@ -6864,11 +7053,11 @@ function calcularCotizacion() {
       title: 'Validando...',
       html: 'Por favor espere',
       allowOutsideClick: false,
-      didOpen: function() { Swal.showLoading(); }
+      didOpen: function () { Swal.showLoading(); }
     });
 
     google.script.run
-      .withSuccessHandler(function(response) {
+      .withSuccessHandler(function (response) {
         if (response.valid) {
           $('#validacionOTP').addClass('hidden');
           $('#confirmacionExitosa').removeClass('hidden');
@@ -6893,7 +7082,7 @@ function calcularCotizacion() {
           $('#otp1').focus();
         }
       })
-      .withFailureHandler(function(error) {
+      .withFailureHandler(function (error) {
         Swal.fire('Error de Conexion', 'No se pudo validar el codigo: ' + (error.message || error), 'error');
       })
       .validarOtpBackend(identificador, otp);
@@ -6914,13 +7103,13 @@ function calcularCotizacion() {
       showCancelButton: true,
       confirmButtonText: 'Si, reenviar',
       cancelButtonText: 'Cancelar'
-    }).then(function(result) {
+    }).then(function (result) {
       if (!result.isConfirmed) return;
 
       $('#otp1, #otp2, #otp3, #otp4, #otp5, #otp6').val('');
       $('#otp1').focus();
 
-      var dest        = obtenerDestinatarioOTP();
+      var dest = obtenerDestinatarioOTP();
       var esBrokerInm = dest.segmento.includes('BROKER') || dest.segmento.includes('INMOBILIARIA');
 
       // ── Reenvío por WhatsApp ─────────────────────────────────────────────
@@ -6938,11 +7127,11 @@ function calcularCotizacion() {
           title: 'Reenviando...',
           html: 'Conectando con WhatsApp...',
           allowOutsideClick: false,
-          didOpen: function() { Swal.showLoading(); }
+          didOpen: function () { Swal.showLoading(); }
         });
 
         google.script.run
-          .withSuccessHandler(function(response) {
+          .withSuccessHandler(function (response) {
             if (response.success) {
               otpIdentificadorEnviado = telefonoLimpio;
               var label = esBrokerInm ? dest.nombre + ' (' + dest.telefono + ')' : dest.telefono;
@@ -6957,12 +7146,12 @@ function calcularCotizacion() {
               Swal.fire('Error', 'No se pudo reenviar el codigo. Intente de nuevo.', 'error');
             }
           })
-          .withFailureHandler(function(error) {
+          .withFailureHandler(function (error) {
             Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
           })
           .enviarOtpWhatsapp(telefonoLimpio);
 
-      // ── Reenvío por Email ────────────────────────────────────────────────
+        // ── Reenvío por Email ────────────────────────────────────────────────
       } else if (otpMetodoEnviado === 'email') {
 
         if (!dest.email) {
@@ -6974,11 +7163,11 @@ function calcularCotizacion() {
           title: 'Reenviando...',
           html: 'Enviando correo electronico...',
           allowOutsideClick: false,
-          didOpen: function() { Swal.showLoading(); }
+          didOpen: function () { Swal.showLoading(); }
         });
 
         google.script.run
-          .withSuccessHandler(function(response) {
+          .withSuccessHandler(function (response) {
             if (response.success) {
               otpIdentificadorEnviado = dest.email;
               var label = esBrokerInm ? dest.nombre + ' (' + dest.email + ')' : dest.email;
@@ -6993,7 +7182,7 @@ function calcularCotizacion() {
               Swal.fire('Error', response.error || 'No se pudo reenviar el correo. Intente de nuevo.', 'error');
             }
           })
-          .withFailureHandler(function(error) {
+          .withFailureHandler(function (error) {
             Swal.fire('Error de Conexion', 'Ocurrio un error al conectar con el servidor: ' + (error.message || error), 'error');
           })
           .enviarOtpEmail(dest.email);
@@ -7036,204 +7225,6 @@ function calcularCotizacion() {
   }
 
 
-  // async function guardarGestionUnificada(tipoAccion = 'NORMAL') {
-  //   // Tipos: 'NORMAL', 'PROCESO_ESPECIAL', 'DESISTIMIENTO'
-
-  //   // 1. RECOLECCIÓN DE DATOS BÁSICOS
-  //   const conversacion = $('#db_CONVERSACION_RENOVACION').val().trim();
-  //   const fechaSeguimiento = $('#db_FECHA_SEGUIMIENTO').val();
-  //   let estadoContacto = $('#db_CONTACTO').val();
-
-  //    if (tipoAccion !== 'DESISTIMIENTO') {
-  //     estadoContacto = "Desistido";
-  //     if (!conversacion) {
-  //       Swal.fire('Observación Requerida', 'Debe ingresar las notas de la conversación.', 'warning');
-  //       return;
-  //     }
-
-  //   // 2. VALIDACIONES DE NEGOCIO (Gatekeeper)
-
-  //   if (procesoEspecialSeleccionado === 'OTRO_SI') {
-  //     if (!archivosSubidos.otroSi) {
-  //       Swal.fire('Atención', 'Seleccionó "Otro Sí" pero no ha cargado el documento PDF firmado.', 'warning');
-  //       return; // Detiene el guardado
-  //     }
-  //     // Forzamos el tipo de acción para que el backend sepa qué hacer
-  //     tipoAccion = 'PROCESO_ESPECIAL';
-  //   }
-
-  //   if (procesoEspecialSeleccionado === 'CESION') {
-  //     if (!archivosSubidos.cesionCedula) {
-  //       Swal.fire('Atención', 'Seleccionó "Cesión" pero no ha cargado la cédula del nuevo propietario.', 'warning');
-  //       return; // Detiene el guardado
-  //     }
-  //     tipoAccion = 'PROCESO_ESPECIAL';
-  //   }
-
-
-  //   const valCanon = parsearMoneda($('#db_NUEVO_CANON_SOLO').val());
-  //   const valAdmon = parsearMoneda($('#db_NUEVA_ADMINISTRACION').val());
-  //   const valServicios = parsearMoneda($('#nuevosServicios').val());
-  //   const valDyF = parsearMoneda($('#nuevosDyF').val());
-
-  //   // Captura de Primas e Impuestos (Leemos los textos calculados de las tarjetas)
-  //   const detalleFinanciero = {
-  //     aseguradoCanon: parsearMoneda($('#card_asegurado_canon').text()),
-  //     primaNetaCanon: parsearMoneda($('#card_prima_canon').text()),
-  //     ivaCanon: parsearMoneda($('#card_iva_canon').text()),
-  //     totalCanon: parsearMoneda($('#card_total_canon').text()),
-
-  //     tasaServicios: $('#card_tasa_serv').text(),
-  //     primaNetaServ: parsearMoneda($('#card_prima_serv').text()),
-  //     ivaServ: parsearMoneda($('#card_iva_serv').text()),
-  //     totalServ: parsearMoneda($('#card_total_serv').text()),
-
-  //     primaNetaDyF: parsearMoneda($('#card_prima_dyf').text()),
-  //     ivaDyF: parsearMoneda($('#card_iva_dyf').text()),
-  //     totalDyF: parsearMoneda($('#card_total_dyf').text()),
-
-  //     granTotal: parsearMoneda($('#cotizacionTotalFooter').text())
-  //   };
-
-  //   // 4. CONSTRUCCIÓN DEL OBJETO MAESTRO
-  //   let datosParaGuardar = {
-  //     // Identificadores
-  //     poliza: $('#db_POLIZA').text(),
-  //     solicitud: $('#db_SOLICITUD').text(),
-  //     asegurado: $('#db_ASEGURADO').text(),
-  //     documento: $('#db_DOCUMENTO').text(),
-  //     tipoDocumento: $('#db_TIPO_DOCUMENTO').text(),
-
-  //     // Contacto Actualizado
-  //     telefono1: $('#propietariotelfijo').val(),
-  //     celular: $('#propietarioTelefono').val(),
-  //     email: $('#propietarioEmail').val(),
-
-  //     // Datos Inmueble y Cumplimiento
-  //     direccionRiesgo: $('#db_DIRECCION_RIESGO').text(),
-  //     destinoInmueble: $('#db_DESTINO_INMUEBLE').text(),
-  //     pazSalvo: $('#pazSalvoModalRenova').val(),
-  //     estadoInmueble: $('#estadoInmuebleRenova').val(),
-
-  //     // VIGENCIAS (La selección del usuario)
-  //     vigenciaActual: $('#db_VIGENCIA').text(),
-  //     vencimientoActual: $('#db_VENCIMIENTO').text(),
-  //     fechaInicioNuevaVigencia: $('#fechaInicioVigencia').val(),
-  //     fechaFinNuevaVigencia: $('#fechaFinVigencia').val(),
-  //     mesesVigencia: $('#formularioNuevaPoliza').data('meses-calculados') || 12,
-
-  //     // VALORES DESGLOSADOS (Separados para emisión correcta)
-  //     canon: valCanon,
-  //     admon: valAdmon,
-  //     valorAsegSep: valServicios,
-  //     valorAsegDyf: valDyF,
-
-  //     // INDICADORES DE SELECCIÓN
-  //     tipoPoliza: tipoPolizaSeleccionada || 'PENDIENTE',
-  //     ajusteIPC: tipoPolizaSeleccionada === 'nueva' ? $('#input_IPC').val() : 0,
-  //     tipoServicio: $('#tipoServicio').val(),
-
-  //     // DETALLE FINANCIERO COMPLETO
-  //     detalleFinanciero: detalleFinanciero,
-  //     cotizacionTotal: $('#cotizacionTotalFooter').text(),
-
-  //     // Estados y Procesos
-  //     sarlaftEstado: estadoSarlaft || 'PENDIENTE',
-  //     sarlaftFecha: $('#db_FECHA_ULTIMO_SARLAFT').text(),
-  //     procesoEspecial: procesoEspecialSeleccionado || 'NINGUNO',
-
-  //     // Sub-objeto Cesión
-  //     datosCesion: procesoEspecialSeleccionado === 'CESION' ? {
-  //       nombre: $('#cesionNombre').val(),
-  //       tipoDoc: $('#cesionTipoDoc').val(),
-  //       numDoc: $('#cesionNumDoc').val(),
-  //       telefono: $('#cesionTelefono').val(),
-  //     } : null,
-  //   };
-
-  //   // 5. MANEJO DE ARCHIVOS (Lectura Asíncrona)
-  //   let archivosParaEnviar = {};
-  //   try {
-  //     // Sarlaft
-  //     if (archivosSubidos.sarlaft) {
-  //       archivosParaEnviar.sarlaft = await readFileAsBase64(archivosSubidos.sarlaft);
-  //     }
-  //     // Documento Propietario (Paso 1)
-  //     if (archivosSubidos.propietarioDoc) {
-  //       archivosParaEnviar.propietarioDoc = await readFileAsBase64(archivosSubidos.propietarioDoc);
-  //     }
-
-  //     // Archivos de Procesos Especiales
-  //     if (procesoEspecialSeleccionado === 'OTRO_SI') {
-  //       if (!archivosSubidos.otroSi) {
-  //         Swal.fire('Falta Archivo', 'Debe cargar el contrato Otro Sí firmado.', 'warning');
-  //         return;
-  //       }
-  //       archivosParaEnviar.otroSi = await readFileAsBase64(archivosSubidos.otroSi);
-  //     }
-
-  //     if (procesoEspecialSeleccionado === 'CESION') {
-  //       if (!archivosSubidos.cesionCedula) {
-  //         Swal.fire('Falta Archivo', 'Debe cargar la cédula del nuevo propietario.', 'warning');
-  //         return;
-  //       }
-  //       archivosParaEnviar.cesionCedula = await readFileAsBase64(archivosSubidos.cesionCedula);
-
-  //       if (archivosSubidos.cesionDocAdicional) {
-  //         archivosParaEnviar.cesionDocAdicional = await readFileAsBase64(archivosSubidos.cesionDocAdicional);
-  //       }
-  //     }
-  //   } catch (e) {
-  //     Swal.fire('Error Archivos', 'No se pudieron leer los documentos adjuntos: ' + e, 'error');
-  //     return;
-  //   }
-
-  //   // 6. AJUSTES DE ESTADO PARA DESISTIMIENTO
-  //   if (tipoAccion === 'DESISTIMIENTO') {
-  //     datosParaGuardar.motivoDesistimiento = $('#db_MOTIVO_NO_RENOVACION').val();
-  //     datosParaGuardar.detalleDesistimiento = $('#detalleNoRenovacionSwal').val();
-  //     estadoContacto = "Desistimiento";
-  //   } else if (tipoAccion === 'PROCESO_ESPECIAL') {
-  //     if (!estadoContacto) estadoContacto = "En Gestión - Proceso Especial";
-  //   }
-
-  //   let observacionesPayload = {
-  //     observacion: conversacion,
-  //     fechaseguimiento: fechaSeguimiento,
-  //     estadoGestion: estadoContacto
-  //   };
-  //   showLoadingSpinner('Felicitaciones ...', 'La información está siendo guardada...');
-  //   google.script.run
-  //     .withSuccessHandler(function (response) {
-  //     reloadDataTable()
-  //      hideLoadingSpinner();
-  //       Swal.close();
-  //       if (response.status === 'success') {
-  //         let msg = 'Gestión guardada correctamente.';
-  //         let icono = 'success';
-
-  //         if (tipoAccion === 'DESISTIMIENTO') { msg = 'Desistimiento registrado.'; icono = 'info'; }
-
-  //         Swal.fire({
-  //           title: 'Operación Exitosa',
-  //           text: msg,
-  //           icon: icono,
-  //           confirmButtonText: 'Finalizar'
-  //         }).then(() => {
-  //           $('#modalGestionRenovaciones').modal('hide');
-  //            });
-  //       } else {
-  //         Swal.fire('Error del Servidor', response.message, 'error');
-  //       }
-  //     })
-  //     .withFailureHandler(function (error) {
-  //        hideLoadingSpinner();
-  //       Swal.close();
-  //       Swal.fire('Error de Conexión', error.message, 'error');
-  //     })
-  //     .guardarGestionRenovacion(datosParaGuardar, observacionesPayload, archivosParaEnviar);
-  // }
-
 
 
 
@@ -7241,63 +7232,154 @@ function calcularCotizacion() {
   async function guardarGestionUnificada(tipoAccion = 'NORMAL') {
     // Tipos soportados: 'NORMAL', 'PROCESO_ESPECIAL', 'DESISTIMIENTO'
 
-     const conversacion = $('#db_CONVERSACION_RENOVACION').val().trim();
+    const conversacion = $('#db_CONVERSACION_RENOVACION').val().trim();
     const fechaSeguimiento = $('#db_FECHA_SEGUIMIENTO').val();
     let estadoContacto = $('#db_CONTACTO').val();
- 
 
-   if (tipoAccion === 'DESISTIMIENTO') {
-      estadoContacto = "Desistido"; 
-      // Aquí no validamos pasos, solo procedemos a guardar el cierre.
-    } 
-    // B. Validaciones para Gestión Normal (Botón Verde "Guardar Gestión")
+    // A. Flujo de Proceso Especial Unificado (Otro Sí, Cesión, Correcciones)
+    if (procesoEspecialSeleccionado === 'OTRO_SI' || procesoEspecialSeleccionado === 'CESION' || procesoEspecialSeleccionado === 'CORRECCION') {
+      const observacionesProceso = $('#observacionesProceso').val().trim();
+
+      // Validar observaciones obligatorias
+      if (!observacionesProceso) {
+        return Swal.fire('Observaciones Requeridas', 'Las observaciones son obligatorias para el proceso especial.', 'warning');
+      }
+
+      // Validar al menos 1 archivo para Otro Sí
+      if (procesoEspecialSeleccionado === 'OTRO_SI' && archivosSeleccionados.length === 0) {
+        return Swal.fire('Documentos Requeridos', 'Debe cargar al menos 1 documento de soporte para Otro Sí.', 'warning');
+      }
+
+      // Validar OTP para Otro Sí y Cesión
+      if (procesoEspecialSeleccionado === 'OTRO_SI' || procesoEspecialSeleccionado === 'CESION') {
+        if ($('#db_VALIDACION_RENOVACION').val() !== 'OTP_VALIDADO') {
+          return Swal.fire('OTP Requerido', 'Debe completar la validación OTP antes de guardar.', 'warning');
+        }
+      }
+
+      // Para Correcciones: bypass OTP, usar estado seleccionado o default "Caso Especial"
+      let estadoGestionProceso = estadoContacto;
+      if (procesoEspecialSeleccionado === 'CORRECCION') {
+        estadoGestionProceso = estadoContacto || 'Caso Especial';
+      }
+
+      // Mostrar spinner de carga
+      showLoadingSpinner('Guardando...', 'Procesando gestión de proceso especial...');
+
+      // Recopilar archivos del componente multi-file via convertirArchivosABase64
+      let archivosBase64 = { documentosProceso: [] };
+      try {
+        if (archivosSeleccionados.length > 0) {
+          const archivosConvertidos = await convertirArchivosABase64();
+          archivosBase64.documentosProceso = archivosConvertidos;
+        }
+      } catch (e) {
+        hideLoadingSpinner();
+        console.error('Error al convertir archivos:', e);
+        return Swal.fire('Error de Archivos', 'Error al procesar los documentos adjuntos. Intente nuevamente.', 'error');
+      }
+
+      // Construir objeto datos con procesoEspecial correspondiente
+      const getT = (id) => $(id).text();
+      const getV = (id) => $(id).val();
+
+      const datosProcesoEspecial = {
+        poliza: getT('#db_POLIZA'),
+        solicitud: getT('#db_SOLICITUD'),
+        asegurado: getT('#db_ASEGURADO'),
+        documento: getT('#db_DOCUMENTO'),
+        tipoDocumento: getT('#db_TIPO_DOCUMENTO'),
+        celular: getV('#propietarioTelefono'),
+        email: getV('#propietarioEmail'),
+        direccionRiesgo: getT('#db_DIRECCION_RIESGO'),
+        procesoEspecial: procesoEspecialSeleccionado
+      };
+
+      const observacionesPayload = {
+        observacion: observacionesProceso,
+        fechaseguimiento: fechaSeguimiento || '',
+        estadoGestion: estadoGestionProceso
+      };
+
+      // Enviar via google.script.run
+      google.script.run
+        .withSuccessHandler(function (response) {
+          hideLoadingSpinner();
+
+          if (response.status === 'success') {
+            reloadDataTable();
+            const labelProceso = PROCESO_TIPOS[procesoEspecialSeleccionado]
+              ? PROCESO_TIPOS[procesoEspecialSeleccionado].label
+              : 'Proceso Especial';
+
+            Swal.fire({
+              title: 'Gestión Guardada',
+              text: `La gestión de ${labelProceso} ha sido guardada correctamente.`,
+              icon: 'success',
+              confirmButtonText: 'Aceptar',
+              confirmButtonColor: '#673ab7',
+              timer: 3000
+            }).then(function () {
+              limpiarFormularioRenovaciones();
+              $('#modalGestionRenovaciones').modal('hide');
+            });
+
+            pintarHistorialObservaciones();
+          } else {
+            Swal.fire('Error del Servidor', response.message || 'Ocurrió un error al guardar la gestión.', 'error');
+          }
+        })
+        .withFailureHandler(function (error) {
+          hideLoadingSpinner();
+          Swal.fire('Error de Conexión', 'No se pudo conectar con el servidor. Intente nuevamente.', 'error');
+          console.error('Error guardando proceso especial:', error);
+        })
+        .guardarGestionRenovacion(datosProcesoEspecial, observacionesPayload, archivosBase64);
+
+      return;
+    }
+
+    // B. Flujo de Desistimiento
+    if (tipoAccion === 'DESISTIMIENTO') {
+      estadoContacto = "Desistido";
+    }
+    // C. Validaciones para Gestión Normal (Botón Verde "Guardar Gestión")
     else {
-      
+
       // 1. Observación obligatoria para cualquier gestión normal
       if (!conversacion) {
         Swal.fire('Observación Requerida', 'Por favor ingrese las notas de la conversación.', 'warning');
         return;
       }
 
-      // 2. Validación de Archivos para Procesos Especiales (Prioridad Alta)
-      if (procesoEspecialSeleccionado === 'OTRO_SI') {
-        if (!archivosSubidos.otroSi) return Swal.fire('Falta Archivo', 'Debe cargar el contrato Otro Sí firmado.', 'warning');
-        tipoAccion = 'PROCESO_ESPECIAL';
-      }
-      else if (procesoEspecialSeleccionado === 'CESION') {
-        if (!archivosSubidos.cesionCedula) return Swal.fire('Falta Archivo', 'Debe cargar la cédula del nuevo propietario.', 'warning');
-        tipoAccion = 'PROCESO_ESPECIAL';
-      }
+      // 2. VALIDACIÓN ESTRICTA: SOLO SI ES "ENVIAR A EXPEDICION"
+      if (estadoContacto === "Enviar a Expedicion") {
 
-      // 3. VALIDACIÓN ESTRICTA: SOLO SI ES "ENVIAR A EXPEDICION"
-      // Aquí aplicamos el filtro: Si es cualquier otra cosa (No responde, Interesado, etc), pasa derecho.
-      else if (estadoContacto === "Enviar a Expedicion") {
-        
         let errores = [];
-        
+
         // Paso 1: Datos Propietario
         if (!$('#check-propietario').is(':checked')) {
-            errores.push({ step: '#step-propietario', msg: "Paso 1: Confirmar Datos Propietario" });
+          errores.push({ step: '#step-propietario', msg: "Paso 1: Confirmar Datos Propietario" });
         }
-        
+
         // Paso 2: Sarlaft (Debe estar verificado o vigente)
         if (!sarlaftVerificado && estadoSarlaft !== 'VIGENTE' && estadoSarlaft !== 'ACTUALIZADO') {
-             errores.push({ step: '#step-sarlaft', msg: "Paso 2: Validación de SARLAFT" });
+          errores.push({ step: '#step-sarlaft', msg: "Paso 2: Validación de SARLAFT" });
         }
 
         // Paso 3: Cumplimiento (Paz y Salvo)
         if (!$('#check-cumplimiento').is(':checked')) {
-            errores.push({ step: '#step-cumplimiento', msg: "Paso 3: Validación de Cumplimiento (Paz y Salvo)" });
+          errores.push({ step: '#step-cumplimiento', msg: "Paso 3: Validación de Cumplimiento (Paz y Salvo)" });
         }
 
         // Paso 4: Configuración de Póliza
         if (!tipoPolizaSeleccionada) {
-            errores.push({ step: '#step-poliza', msg: "Paso 4: Selección de Póliza (Nueva o Anterior)" });
+          errores.push({ step: '#step-poliza', msg: "Paso 4: Selección de Póliza (Nueva o Anterior)" });
         }
 
         // Paso 5: OTP (Validación final del cliente)
         if ($('#db_VALIDACION_RENOVACION').val() !== 'OTP_VALIDADO') {
-            errores.push({ step: '#step-otp', msg: "Paso 5: Validación del OTP con el cliente" });
+          errores.push({ step: '#step-otp', msg: "Paso 5: Validación del OTP con el cliente" });
         }
 
         // Si falta algo, BLOQUEAMOS el guardado y mostramos alerta
@@ -7313,26 +7395,25 @@ function calcularCotizacion() {
             confirmButtonColor: '#d33'
           }).then((result) => {
             if (result.isConfirmed) {
-              mostrarPasoConAnimacion(errores[0].step); // Lleva al usuario al primer paso que falta
+              mostrarPasoConAnimacion(errores[0].step);
             }
           });
         }
       }
-      
-      // Si no seleccionó nada en el dropdown y no es proceso especial
-      if (!estadoContacto && tipoAccion !== 'PROCESO_ESPECIAL') {
+
+      // Si no seleccionó nada en el dropdown
+      if (!estadoContacto) {
         Swal.fire('Estado Requerido', 'Debe seleccionar el estado del contacto para tipificar la llamada.', 'warning');
         $('#db_CONTACTO').focus();
         return;
       }
     }
-    
+
     let archivosParaEnviar = {};
     try {
       const promesasArchivos = [];
       const encolarLectura = (file, key) => {
         if (file) {
-          // Si ya viene como objeto base64 {data, mimeType, name}, no releer
           if (file.data && file.mimeType && file.name) {
             promesasArchivos.push(Promise.resolve({ key, data: file }));
           } else {
@@ -7343,14 +7424,6 @@ function calcularCotizacion() {
       if (tipoAccion !== 'DESISTIMIENTO') {
         encolarLectura(archivosSubidos.sarlaft, 'sarlaft');
         encolarLectura(archivosSubidos.propietarioDoc, 'propietarioDoc');
-
-        if (procesoEspecialSeleccionado === 'OTRO_SI') {
-          encolarLectura(archivosSubidos.otroSi, 'otroSi');
-        }
-        if (procesoEspecialSeleccionado === 'CESION') {
-          encolarLectura(archivosSubidos.cesionCedula, 'cesionCedula');
-          encolarLectura(archivosSubidos.cesionDocAdicional, 'cesionDocAdicional');
-        }
       }
       if (promesasArchivos.length > 0) {
         const resultados = await Promise.all(promesasArchivos);
@@ -7384,7 +7457,6 @@ function calcularCotizacion() {
     }
 
     let datosParaGuardar = {
-      // IDs
       poliza: getT('#db_POLIZA'),
       solicitud: getT('#db_SOLICITUD'),
       asegurado: getT('#db_ASEGURADO'),
@@ -7407,13 +7479,7 @@ function calcularCotizacion() {
       cotizacionTotal: getT('#cotizacionTotalFooter'),
       sarlaftEstado: estadoSarlaft || 'PENDIENTE',
       sarlaftFecha: getT('#db_FECHA_ULTIMO_SARLAFT'),
-      procesoEspecial: procesoEspecialSeleccionado || 'NINGUNO',
-      datosCesion: (procesoEspecialSeleccionado === 'CESION') ? {
-        nombre: getV('#cesionNombre'),
-        tipoDoc: getV('#cesionTipoDoc'),
-        numDoc: getV('#cesionNumDoc'),
-        telefono: getV('#cesionTelefono'),
-      } : null
+      procesoEspecial: procesoEspecialSeleccionado || 'NINGUNO'
     };
     if (tipoAccion === 'DESISTIMIENTO') {
       datosParaGuardar.motivoDesistimiento = getV('#db_MOTIVO_NO_RENOVACION');
@@ -7426,7 +7492,7 @@ function calcularCotizacion() {
       fechaseguimiento: fechaSeguimiento,
       estadoGestion: estadoContacto
     };
- 
+
     showLoadingSpinner('Guardando...', 'Procesando información...');
 
     google.script.run
@@ -7435,8 +7501,8 @@ function calcularCotizacion() {
         Swal.close();
 
         if (response.status === 'success') {
-            reloadDataTable();
-         let title = 'Operación Exitosa';
+          reloadDataTable();
+          let title = 'Operación Exitosa';
           let icon = 'success';
           if (tipoAccion === 'DESISTIMIENTO') {
             title = 'Desistimiento Registrado';
@@ -7453,7 +7519,7 @@ function calcularCotizacion() {
             $('#modalGestionRenovaciones').modal('hide');
           });
 
-          pintarHistorialObservaciones()
+          pintarHistorialObservaciones();
         } else {
           Swal.fire('Error del Servidor', response.message || 'Error desconocido', 'error');
         }
@@ -7469,7 +7535,7 @@ function calcularCotizacion() {
 
 
 
-function marcarNoRenova() {
+  function marcarNoRenova() {
     const nombreCliente = $('#db_ASEGURADO').text() || "Cliente";
 
     Swal.fire({
@@ -7523,7 +7589,7 @@ function marcarNoRenova() {
         guardarGestionUnificada('DESISTIMIENTO');
       }
     });
-}
+  }
 
   function actualizarEstadoGestion(mensaje, tipo = 'info') {
     const badges = {
@@ -7585,13 +7651,17 @@ function marcarNoRenova() {
     $('.otp-input').val('');
 
     // Limpiar inputs de archivos y previews
-    $('#sarlaftFileInput, #otroSiFileInput, #cesionDocAdicionalInput').val('');
-    $('#otroSiFilePreview, #cesionDocAdicionalPreview, #sarlaftFilePreview').empty();
+    $('#sarlaftFileInput').val('');
+    $('#sarlaftFilePreview').empty();
     $('input[type="file"]', '#modalGestionRenovaciones').val('');
 
-    // Limpiar campos de cesión
-    $('#cesionTipoDoc').val('');
-    $('#cesionNombre, #cesionNumDoc, #cesionTelefono').val('');
+    // Resetear formulario unificado de procesos especiales
+    $('#formProcesoEspecial').addClass('hidden');
+    $('#observacionesProceso').val('');
+    $('#contadorObservaciones').text('0');
+    archivosSeleccionados = [];
+    procesoEspecialSeleccionado = null;
+    $('.proceso-especial-card').removeClass('selected');
 
     // Resetear tipo de servicio
     $('#tipoServicio').val('VIVIENDA');
@@ -7660,68 +7730,68 @@ function marcarNoRenova() {
     verificarSarlaft();
   }
 
-function pintarHistorialObservaciones() {
+  function pintarHistorialObservaciones() {
     const container = $('#chatObservacionesContainer');
     container.empty(); // Limpiar chat anterior
     let historial = [];
 
     if (currentLeadData) {
-        historial = currentLeadData.historialGestiones || 
-                    currentLeadData.historiaGestiones || 
-                    currentLeadData.historialGestion || 
-                    [];
+      historial = currentLeadData.historialGestiones ||
+        currentLeadData.historiaGestiones ||
+        currentLeadData.historialGestion ||
+        [];
     }
 
     if (typeof historial === 'string') {
-        try {
-            let clean = historial.trim();
-            // Limpieza de prefijos de seguridad de Google (si existen)
-            if (clean.startsWith(")]}',")) {
-                clean = clean.replace(/^\)]}',/, "").trim();
-            }
-            historial = JSON.parse(clean);
-        } catch (e) {
-            console.error("Error parseando historial:", e);
-            historial = [];
+      try {
+        let clean = historial.trim();
+        // Limpieza de prefijos de seguridad de Google (si existen)
+        if (clean.startsWith(")]}',")) {
+          clean = clean.replace(/^\)]}',/, "").trim();
         }
+        historial = JSON.parse(clean);
+      } catch (e) {
+        console.error("Error parseando historial:", e);
+        historial = [];
+      }
     }
 
     if (!Array.isArray(historial)) {
-        historial = (historial && typeof historial === 'object') ? [historial] : [];
+      historial = (historial && typeof historial === 'object') ? [historial] : [];
     }
 
     if (historial.length === 0) {
-        container.html(`
+      container.html(`
             <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted opacity-50">
                 <i class="fas fa-comment-slash fa-2x mb-2"></i>
                 <small>No hay historial registrado</small>
             </div>
         `);
-        return;
+      return;
     }
 
     // 5. RENDERIZADO
     let htmlContent = '';
-    
+
     // Recorremos el historial
     historial.forEach(item => {
-        const usuario = item.usuario || "Sistema";
-        const fecha = item.fecha || "N/A";
-        // Buscamos la observación en las distintas propiedades posibles
-        const obs = item.observacion || item.observaciones || "Sin detalle"; 
-        const estado = item.estado || item.leadEtapaActual || "";
-        const motivo = item.motivoDesistimiento ? `<br><span class="text-danger fw-bold"><i class="fas fa-ban me-1"></i>Motivo: ${item.motivoDesistimiento}</span>` : '';
+      const usuario = item.usuario || "Sistema";
+      const fecha = item.fecha || "N/A";
+      // Buscamos la observación en las distintas propiedades posibles
+      const obs = item.observacion || item.observaciones || "Sin detalle";
+      const estado = item.estado || item.leadEtapaActual || "";
+      const motivo = item.motivoDesistimiento ? `<br><span class="text-danger fw-bold"><i class="fas fa-ban me-1"></i>Motivo: ${item.motivoDesistimiento}</span>` : '';
 
-        // Estilos para diferenciar Sistema vs Asesor
-        const isSystem = usuario === 'Sistema' || usuario.includes('System') || usuario.includes('script');
-        
-        // Colores y Alineación
-        const avatarColor = isSystem ? 'bg-secondary' : 'bg-primary';
-        const icon = isSystem ? 'fa-robot' : 'fa-user';
-        const bubbleColor = isSystem ? '#f8f9fa' : '#e7f1ff'; // Gris claro vs Azul muy claro
-        const borderColor = isSystem ? 'border-light' : 'border-primary';
-        
-        htmlContent += `
+      // Estilos para diferenciar Sistema vs Asesor
+      const isSystem = usuario === 'Sistema' || usuario.includes('System') || usuario.includes('script');
+
+      // Colores y Alineación
+      const avatarColor = isSystem ? 'bg-secondary' : 'bg-primary';
+      const icon = isSystem ? 'fa-robot' : 'fa-user';
+      const bubbleColor = isSystem ? '#f8f9fa' : '#e7f1ff'; // Gris claro vs Azul muy claro
+      const borderColor = isSystem ? 'border-light' : 'border-primary';
+
+      htmlContent += `
         <div class="d-flex justify-content-start mb-3 fade-in-up w-100">
             <div class="me-2 flex-shrink-0">
                 <div class="rounded-circle ${avatarColor} text-white d-flex align-items-center justify-content-center shadow-sm" style="width: 35px; height: 35px; font-size: 0.8rem;">
@@ -7750,9 +7820,9 @@ function pintarHistorialObservaciones() {
 
     // 6. AUTO-SCROLL AL FINAL (Para ver lo más reciente)
     setTimeout(() => {
-        container.scrollTop(container[0].scrollHeight);
+      container.scrollTop(container[0].scrollHeight);
     }, 200);
-}
+  }
 
   // Botón de prueba para abrir el modal
 

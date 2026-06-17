@@ -1,0 +1,14 @@
+{
+  "name": "gestor-renovaciones-proyectiva",
+  "version": "1.0.0",
+  "description": "Tests for Gestor Renovaciones Proyectiva - Google Apps Script",
+  "private": true,
+  "scripts": {
+    "test": "jest --run",
+    "test:bugs": "jest tests/bug-condition-exploration.test.js --run"
+  },
+  "devDependencies": {
+    "jest": "29.7.0",
+    "fast-check": "3.22.0"
+  }
+}

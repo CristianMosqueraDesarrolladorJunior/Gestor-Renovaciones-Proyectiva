@@ -5311,19 +5311,19 @@
                         </div>
                         <div>
                           <h5 class="mb-0 fw-bold">Gestión de Procesos Especiales</h5>
-                          <small class="text-muted">Seleccione si requiere tramitar Otro Sí o
-                            Cesión de Contrato</small>
+                          <small class="text-muted">Seleccione si requiere tramitar Otro Sí,
+                            Cesión de Contrato o Correcciones</small>
                         </div>
                       </div>
 
                       <div class="alert alert-info alert-custom mb-4">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>¿Requiere gestionar algún proceso adicional?</strong> Seleccione si
-                        aplica Otro Sí o Cesión de Contrato.
+                        aplica Otro Sí, Cesión de Contrato o Correcciones.
                       </div>
 
                       <div class="row g-4 mb-4">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                           <div class="proceso-especial-card" id="cardOtroSi" onclick="seleccionarProceso('otroSi')">
                             <div class="proceso-icon"
                               style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
@@ -5343,7 +5343,7 @@
                           </div>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                           <div class="proceso-especial-card" id="cardCesion" onclick="seleccionarProceso('cesion')">
                             <div class="proceso-icon"
                               style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
@@ -5353,8 +5353,8 @@
                             <p class="text-muted text-center small mb-3">Transferencia de
                               contrato a nuevo propietario</p>
                             <ul class="list-unstyled small text-muted">
-                              <li><i class="fas fa-check text-success me-2"></i>Cédula nuevo
-                                propietario</li>
+                              <li><i class="fas fa-check text-success me-2"></i>Documentos del
+                                nuevo propietario</li>
                               <li><i class="fas fa-check text-success me-2"></i>RUT o Cámara
                                 de Comercio</li>
                               <li><i class="fas fa-check text-success me-2"></i>Cambio de
@@ -5362,124 +5362,70 @@
                             </ul>
                           </div>
                         </div>
-                      </div>
 
-                      <!-- Formulario Otro Sí -->
-                      <div id="formOtroSi" class="hidden">
-                        <div class="card border-primary">
-                          <div class="card-header bg-primary text-white">
-                            <h6 class="mb-0"><i class="fas fa-file-contract me-2"></i>Gestión de
-                              Otro Sí</h6>
-                          </div>
-                          <div class="card-body">
-                            <div class="alert alert-info alert-custom">
-                              <i class="fas fa-info-circle me-2"></i>
-                              El cliente debe enviar el contrato modificado firmado. El asesor
-                              lo cargará en la plataforma.
+                        <div class="col-md-4">
+                          <div class="proceso-especial-card" id="cardCorrecciones" onclick="seleccionarProceso('correcciones')">
+                            <div class="proceso-icon"
+                              style="background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%); color: white;">
+                              <i class="fas fa-pen-fancy"></i>
                             </div>
-
-                            <div class="mb-3">
-                              <label class="form-label fw-bold">
-                                <i class="fas fa-file-upload me-2"></i>Cargar Contrato Otro
-                                Sí (PDF) *
-                              </label>
-                              <div class="file-upload-area" id="otroSiUploadArea"
-                                onclick="document.getElementById('otroSiFileInput').click()">
-                                <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-2"></i>
-                                <p class="mb-1"><strong>Haga clic o arrastre el contrato
-                                    firmado</strong></p>
-                                <p class="text-muted small mb-0">Formato: PDF (máx. 15MB)
-                                </p>
-                                <input type="file" id="otroSiFileInput" accept=".pdf" class="d-none"
-                                  onchange="handleOtroSiFileUpload(this)">
-                              </div>
-                              <div id="otroSiFilePreview" class="file-preview"></div>
-                            </div>
-
+                            <h5 class="fw-bold text-center mb-2">Correcciones</h5>
+                            <p class="text-muted text-center small mb-3">Corrección de datos
+                              en la póliza (sin OTP requerido)</p>
+                            <ul class="list-unstyled small text-muted">
+                              <li><i class="fas fa-check text-success me-2"></i>No requiere
+                                verificación OTP</li>
+                              <li><i class="fas fa-check text-success me-2"></i>Corrección de
+                                datos erróneos</li>
+                              <li><i class="fas fa-check text-success me-2"></i>Estado: Caso
+                                Especial</li>
+                            </ul>
                           </div>
                         </div>
                       </div>
 
-                      <!-- Formulario Cesión -->
-                      <div id="formCesion" class="hidden">
-                        <div class="card border-info">
-                          <div class="card-header bg-info text-white">
-                            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Gestión de
-                              Cesión de Contrato</h6>
+                      <!-- Formulario Unificado de Proceso Especial -->
+                      <div id="formProcesoEspecial" class="hidden">
+                        <div class="step-section" style="margin-top: 1.5rem;">
+                          <div class="step-header border-bottom pb-3 mb-4">
+                            <div class="step-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                              <i class="fas fa-file-signature"></i>
+                            </div>
+                            <div>
+                              <h5 class="mb-0 fw-bold" id="tituloProcesoEspecial">Gestión de Proceso Especial</h5>
+                              <small class="text-muted">Complete la información requerida para el proceso</small>
+                            </div>
                           </div>
-                          <div class="card-body">
-                            <div class="alert alert-warning alert-custom">
-                              <i class="fas fa-exclamation-triangle me-2"></i>
-                              Debe adjuntar la documentación del nuevo propietario del
-                              inmueble.
-                            </div>
 
-                            <div class="row g-3 mb-3">
-                              <div class="col-md-6">
-                                <label class="form-label fw-bold">Tipo de Documento del
-                                  Nuevo Propietario *</label>
-                                <select class="form-select" id="cesionTipoDoc" onchange="mostrarCamposCesion()">
-                                  <option value="">Seleccione...</option>
-                                  <option value="CC">Cédula de Ciudadanía</option>
-                                  <option value="CE">Cédula de Extranjería</option>
-                                  <option value="NIT">NIT (Persona Jurídica)</option>
-                                </select>
-                              </div>
-                              <div class="col-md-6">
-                                <label class="form-label fw-bold">Número de Documento
-                                  *</label>
-                                <input type="text" class="form-control" id="cesionNumDoc"
-                                  placeholder="Ingrese el número">
-                              </div>
-                            </div>
+                          <!-- Indicador de pasos estilo progressbar -->
+                          <div class="progress-container" style="padding: 15px 0;">
+                            <ul class="progressbar">
+                              <li class="active" style="width: 33.33%;">Observaciones</li>
+                              <li class="active" style="width: 33.33%;">Documentos</li>
+                              <li class="active" style="width: 33.33%;">Guardar</li>
+                            </ul>
+                          </div>
 
-                            <div class="row g-3 mb-3">
-                              <div class="col-md-6">
-                                <label class="form-label fw-bold">Nombre Completo / Razón
-                                  Social *</label>
-                                <input type="text" class="form-control" id="cesionNombre"
-                                  placeholder="Nombre del nuevo propietario">
-                              </div>
-                              <div class="col-md-6">
-                                <label class="form-label fw-bold">Teléfono de Contacto
-                                  *</label>
-                                <input type="tel" class="form-control" id="cesionTelefono" placeholder="3001234567">
-                              </div>
+                          <!-- Textarea de observaciones -->
+                          <div class="mb-4">
+                            <label class="form-label fw-bold" for="observacionesProceso">
+                              <i class="fas fa-comment-alt me-2 text-primary"></i>Observaciones del caso <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="form-control" id="observacionesProceso" rows="4"
+                              maxlength="2000"
+                              style="border: 1px solid #e9ecef; border-radius: 8px; padding: 12px;"
+                              placeholder="Describa el resumen puntual del caso del cliente..."
+                              oninput="actualizarContadorObservaciones()"></textarea>
+                            <div class="d-flex justify-content-end mt-1">
+                              <small class="text-muted">
+                                <span id="contadorObservaciones">0</span> / 2000 caracteres
+                              </small>
                             </div>
+                          </div>
 
-                            <div class="mb-3">
-                              <label class="form-label fw-bold">
-                                <i class="fas fa-id-card me-2"></i>Cédula o Documento de
-                                Identidad *
-                              </label>
-                              <div class="file-upload-area" id="cesionCedulaUploadArea"
-                                onclick="document.getElementById('cesionCedulaInput').click()">
-                                <i class="fas fa-cloud-upload-alt fa-3x text-info mb-2"></i>
-                                <p class="mb-1"><strong>Cargar cédula o documento</strong>
-                                </p>
-                                <p class="text-muted small mb-0">PDF o imagen (máx. 5MB)</p>
-                                <input type="file" id="cesionCedulaInput" accept=".pdf,.jpg,.jpeg,.png" class="d-none"
-                                  onchange="handleCesionCedulaUpload(this)">
-                              </div>
-                              <div id="cesionCedulaPreview" class="file-preview"></div>
-                            </div>
-
-                            <div id="cesionDocumentoAdicional" class="mb-3 hidden">
-                              <label class="form-label fw-bold">
-                                <i class="fas fa-building me-2"></i><span id="labelDocAdicional">RUT o Cámara de
-                                  Comercio</span> *
-                              </label>
-                              <div class="file-upload-area" id="cesionDocAdicionalUploadArea"
-                                onclick="document.getElementById('cesionDocAdicionalInput').click()">
-                                <i class="fas fa-cloud-upload-alt fa-3x text-info mb-2"></i>
-                                <p class="mb-1"><strong>Cargar documento adicional</strong>
-                                </p>
-                                <p class="text-muted small mb-0">PDF (máx. 10MB)</p>
-                                <input type="file" id="cesionDocAdicionalInput" accept=".pdf" class="d-none"
-                                  onchange="handleCesionDocAdicionalUpload(this)">
-                              </div>
-                              <div id="cesionDocAdicionalPreview" class="file-preview"></div>
-                            </div>
+                          <!-- Contenedor para componente multi-file upload -->
+                          <div class="mb-4" id="multiFileUploadContainer">
+                            <!-- El componente de carga múltiple se inicializa dinámicamente -->
                           </div>
                         </div>
                       </div>
@@ -6303,6 +6249,7 @@
                             <optgroup label="Contacto Exitoso">
                               <option value="Enviar a Expedicion">Enviar a Expedicion</option>
                               <option value="Caso Especial">Caso Especial</option>
+                              <option value="Caso Corregido">Caso Corregido</option>
                               <option value="Volver a Llamar">Volver a Llamar</option>
                               <option value="Cliente ya Renovo">Cliente ya Renovó</option>
                              </optgroup>
@@ -6398,11 +6345,21 @@
 
                     <!-- Botones de Procesos Especiales -->
                     <div class="mb-3">
-                      <h6 class="fw-bold mb-2">Procesos Especiales</h6>
-                      <div class="d-grid gap-2">
-                        <button class="btn btn-warning-custom action-button" onclick="mostrarCesion()">
-                          <i class="fas fa-cogs me-2"></i>Gestionar Procesos Especiales
-                        </button>
+                      <div class="card" style="border: 2px solid #e9ecef; border-radius: 12px; box-shadow: none;">
+                        <div class="card-body p-3">
+                          <div class="d-flex align-items-center mb-2">
+                            <div style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; margin-right: 10px;">
+                              <i class="fas fa-file-signature text-white" style="font-size: 14px;"></i>
+                            </div>
+                            <div>
+                              <h6 class="fw-bold mb-0" style="font-size: 14px;">Correcciones y Procesos Especiales</h6>
+                              <small class="text-muted">Otro Sí · Cesión de Contrato · Correcciones</small>
+                            </div>
+                          </div>
+                          <button class="btn btn-outline-primary action-button w-100" style="border-radius: 8px; font-size: 13px;" onclick="mostrarProcesosEspeciales()">
+                            <i class="fas fa-folder-open me-2"></i>Gestionar Proceso Especial
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -6415,9 +6372,7 @@
                       <input type="hidden" id="db_SARLAFT_FILE_URL" value="">
                       <input type="hidden" id="db_DOCUMENTO_IDENTIDAD_URL" value="">
                       <input type="hidden" id="db_PROPIETARIO_DOC_URL" value="">
-                      <input type="hidden" id="db_OTROSI_FILE_URL" value="">
-                      <input type="hidden" id="db_CESION_CEDULA_URL" value="">
-                      <input type="hidden" id="db_CESION_DOC_ADICIONAL_URL" value="">
+
 
                       <button class="btn btn-success-custom action-button" onclick="guardarGestionUnificada('NORMAL')"
                         id="btnGuardarGestion">

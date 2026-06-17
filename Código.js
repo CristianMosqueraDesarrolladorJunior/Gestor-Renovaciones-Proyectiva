@@ -1014,6 +1014,7 @@ function getDatauserPro() {
     const estadosTerminales = new Set([
       "enviar a expedicion",
       "caso especial",
+      "caso corregido",
       "cliente ya renovo",
       "no interesado",
       "cambio de compañía",
@@ -1121,7 +1122,7 @@ function getDatauserPro() {
         historialGestiones: historialGestion,
         datosInquilino: datosInquilino
       };
-    });
+    }).filter(item => item.leadData && item.leadData.poliza);
 
     var estadosTerminalesRecuperacion = new Set([
       "expedido", "desistido", "cliente ya renovo", "no interesado",

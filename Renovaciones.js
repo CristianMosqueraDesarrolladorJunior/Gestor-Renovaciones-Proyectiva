@@ -38,6 +38,12 @@ const EXPEDIDORES = [
   "jeymmy.aristizabal@segurosbolivar.com"
 ];
 
+// Mapeo nombre ejecutivo de cuenta (columna E de GestionAnalista) → correo
+const MAPA_EJECUTIVOS_CUENTA = {
+  "FABIAN SANCHEZ": "jeison.sanchez@proyectivaseguros.com",
+  "YENY JAIMES":    "yeny.jaimes@proyectivaseguros.com"
+};
+
 function cargarListaAnalistas() {
   var lastRow = DataGestion.getLastRow();
   if (lastRow < 2) return EXPEDIDORES.slice();
@@ -66,9 +72,59 @@ function obtenerSiguienteExpedidor(analistasPreCargados) {
   return seleccionado;
 }
 
+/**
+ * Realiza merge no destructivo del JSON de Columna_Gestion.
+ * Preserva campos existentes no incluidos en la actualización,
+ * y concatena el arreglo documentosProceso sin eliminar entradas previas.
+ * @param {Object|string|null} currentJson - JSON actual de la celda (objeto, string JSON, null o vacío).
+ * @param {Object} newData - Nuevos datos a mergear sobre el JSON existente.
+ * @returns {Object} JSON resultante del merge.
+ */
+function mergeJsonColumnaGestion(currentJson, newData) {
+  var existing = {};
 
+  if (currentJson && typeof currentJson === 'object' && !Array.isArray(currentJson)) {
+    existing = currentJson;
+  } else if (typeof currentJson === 'string' && currentJson.trim() !== '') {
+    try {
+      var parsed = JSON.parse(currentJson.replace(/:\s*NaN\b/g, ': null'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        existing = parsed;
+      }
+    } catch (e) {
+      existing = {};
+    }
+  }
 
- 
+  var safeNewData = (newData && typeof newData === 'object' && !Array.isArray(newData))
+    ? newData
+    : {};
+
+  var merged = {};
+  var key;
+
+  for (key in existing) {
+    if (Object.prototype.hasOwnProperty.call(existing, key)) {
+      merged[key] = existing[key];
+    }
+  }
+
+  for (key in safeNewData) {
+    if (Object.prototype.hasOwnProperty.call(safeNewData, key)) {
+      merged[key] = safeNewData[key];
+    }
+  }
+
+  var prevDocs = Array.isArray(existing.documentosProceso) ? existing.documentosProceso : [];
+  var newDocs = Array.isArray(safeNewData.documentosProceso) ? safeNewData.documentosProceso : [];
+
+  if (prevDocs.length > 0 || newDocs.length > 0) {
+    merged.documentosProceso = prevDocs.concat(newDocs);
+  }
+
+  return merged;
+}
+
 function UpdateRenovations() {
   const sheet = DataRenovations;
   const lastRow = sheet.getLastRow();
@@ -93,11 +149,20 @@ function UpdateRenovations() {
     ? GestionAnalista.getRange(2, 1, lastRowAnalista - 1, GestionAnalista.getLastColumn()).getValues()
     : [];
 
+  // dbAnalistaZ: columna Z con número de póliza (inicia en "50") — sin filtro de marca.
+  // Máxima prioridad: ignora estadosProtegidos y la marca existente en el analista.
+  const dbAnalistaZ = new Map();
+  // dbAnalista: resto de registros del analista, solo sin marca.
   const dbAnalista = new Map();
   for (const row of dataAnalistaRaw) {
     const key = String(row[10]).trim();
-    const marca = (row[29] || "").toString().trim();
-    if (key && marca === "") dbAnalista.set(key, row);
+    if (!key) continue;
+    const valorZ = (row[25] || "").toString().trim();
+    if (/^50\d+/.test(valorZ)) {
+      dbAnalistaZ.set(key, row);
+    } else if ((row[29] || "").toString().trim() === "") {
+      dbAnalista.set(key, row);
+    }
   }
 
   const dbAsesora = getDatabaseMapByKeys(GestionAsesora, 2, polizasNoExpedidas);
@@ -114,7 +179,8 @@ function UpdateRenovations() {
   Logger.log("=== INICIO UpdateRenovations ===");
   Logger.log("Total filas a procesar: " + data.length);
   Logger.log("Pólizas no expedidas (a consultar): " + polizasNoExpedidas.size);
-  Logger.log("Registros en dbAnalista (sin marca CRM): " + dbAnalista.size);
+  Logger.log("Registros en dbAnalistaZ (col Z expedido, sin filtro marca): " + dbAnalistaZ.size);
+  Logger.log("Registros en dbAnalista (sin marca, sin Z-expedido): " + dbAnalista.size);
   Logger.log("Registros en dbAsesora (solo no expedidas): " + dbAsesora.size);
   Logger.log("Registros en dbBroker (solo no expedidas): " + dbBroker.size);
   Logger.log("Registros en dbCorretaje (solo no expedidas): " + dbCorretaje.size);
@@ -131,6 +197,7 @@ function UpdateRenovations() {
     "correccion",
     "recuperado",
     "caso especial",
+    "caso corregido",
     "cliente ya renovo",
     "desistido",
   ]);
@@ -154,6 +221,54 @@ function UpdateRenovations() {
     const estado = row[4].toString().trim().toLowerCase();
     const estadoAnterior = row[4].toString().trim();
     const asesorAnterior = row[2].toString().trim();
+
+    // PRIORIDAD MÁXIMA: columna Z con número de póliza expedida.
+    // Se aplica antes que estadosProtegidos y sin importar si ya tiene marca en el analista.
+    if (dbAnalistaZ.has(polizaKey)) {
+      const analistaRow = dbAnalistaZ.get(polizaKey);
+      const resultado = processAutogestion(analistaRow);
+
+      row[4] = resultado.estado;
+      row[2] = obtenerSiguienteExpedidor(listaAnalistas);
+
+      let datosExistentesZ = {};
+      try {
+        const rawF = (row[5] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        if (rawF) datosExistentesZ = JSON.parse(rawF);
+      } catch (e) {}
+      row[5] = JSON.stringify({ ...datosExistentesZ, ...resultado.data });
+
+      let historialObsZ = [];
+      try {
+        const rawObs = (row[6] || "").toString().replace(/:\s*NaN\b/g, ': null');
+        if (rawObs) {
+          const parsed = JSON.parse(rawObs);
+          historialObsZ = Array.isArray(parsed) ? parsed : [parsed];
+        }
+      } catch (e) {
+        if (row[6]) historialObsZ.push({ fecha: "Previo", observacion: row[6].toString(), usuario: "Sistema" });
+      }
+      historialObsZ.push({
+        fecha: Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss"),
+        usuario: "Sistema (UpdateRenovations - Col Z)",
+        estado: resultado.estado,
+        obsCliente: resultado.data.observaciones.obsCliente || "",
+        observaciones: resultado.data.observaciones.observaciones || "",
+        observacionesEjecutivo: resultado.data.observaciones.observacionesEjecutivo || "",
+        observacionRenovacion: resultado.data.observaciones.observacionRenovacion || ""
+      });
+      row[6] = JSON.stringify(historialObsZ);
+
+      polizasProcesadasAnalista.add(polizaKey);
+      contadorActualizados++;
+      logs.push([
+        fechaEjecucion, polizaKey, "Analista Z (Expedido - Prioritario)",
+        estadoAnterior, resultado.estado, asesorAnterior, row[2],
+        segmento, leadInfo.vencimiento || "",
+        resultado.data.NuevaPoliza || "Sin nueva póliza"
+      ]);
+      continue;
+    }
 
     if (ESTADOS_PROTEGIDOS.has(estado)) {
       contadorProtegidos++;
@@ -398,6 +513,10 @@ function processAutogestion(analistaRow) {
     }
   }
 
+  // Columna E (índice 4): nombre del ejecutivo de cuenta responsable
+  const nombreEjecutivo = (analistaRow[4] || "").toString().trim();
+  const correoEjecutivoCuenta = MAPA_EJECUTIVOS_CUENTA[nombreEjecutivo.toUpperCase()] || "";
+
   const autoGestionData = {
     sarlaft: analistaRow[7],
     formatoRenovacion: analistaRow[8],
@@ -410,6 +529,8 @@ function processAutogestion(analistaRow) {
     correspondencia: analistaRow[16],
     telefono: analistaRow[17],
     ciudad: analistaRow[18],
+    ejecutivoCuenta: nombreEjecutivo,
+    correoEjecutivoCuenta: correoEjecutivoCuenta,
     observaciones: {
       obsCliente: analistaRow[11],
       observaciones: analistaRow[22],
@@ -645,52 +766,110 @@ function guardarGestionRenovacion(datos, observaciones, archivosBase64) {
       }
     }
 
-    // Preservar URLs de archivos previos que ya estaban en la columna F
-    const urlsPrevias = {};
-    const camposURL = ['sarlaftArchivoURL', 'propietarioDocURL', 'otroSiURL', 'cesionCedulaURL', 'cesionDocAdicionalURL'];
-    for (const campo of camposURL) {
-      if (currentJson[campo] && !urlsNuevas[campo]) {
-        urlsPrevias[campo] = currentJson[campo];
+    // Leer JSON actual de Columna_Gestion (columna 6) para merge no destructivo
+    var rawColumnaGestion = sheet.getRange(targetRowNum, 6).getValue();
+    var currentGestionJson = null;
+    try {
+      var rawGestionStr = (rawColumnaGestion || "").toString().replace(/:\s*NaN\b/g, ': null');
+      if (rawGestionStr.trim() !== '') {
+        currentGestionJson = JSON.parse(rawGestionStr);
+      }
+    } catch (e) {
+      currentGestionJson = null;
+    }
+
+    // Construir objeto con los nuevos datos a mergear
+    var newDataForMerge = {};
+    var key;
+    for (key in datos) {
+      if (Object.prototype.hasOwnProperty.call(datos, key)) {
+        newDataForMerge[key] = datos[key];
+      }
+    }
+    for (key in urlsNuevas) {
+      if (Object.prototype.hasOwnProperty.call(urlsNuevas, key)) {
+        newDataForMerge[key] = urlsNuevas[key];
       }
     }
 
-    const finalJsonData = {
-      ...datos,
-      ...urlsPrevias,
-      ...urlsNuevas
-    };
+    // Aplicar merge no destructivo: preserva campos existentes y concatena documentosProceso
+    var mergedJson = mergeJsonColumnaGestion(currentGestionJson, newDataForMerge);
 
-    const jsonString = JSON.stringify(finalJsonData).replace(/:\s*NaN\b/g, ': null');
+    var jsonString = JSON.stringify(mergedJson).replace(/:\s*NaN\b/g, ': null');
 
     sheet.getRange(targetRowNum, 5).setValue(observaciones.estadoGestion);
     sheet.getRange(targetRowNum, 6).setValue(jsonString);
 
-    if (observaciones.estadoGestion === "Caso Especial" || observaciones.estadoGestion === "Enviar a Expedicion") {
+    if (observaciones.estadoGestion === "Caso Corregido") {
+      // Para "Caso Corregido": buscar en historial (columna 7) quién solicitó la corrección
+      var cellHistorial = sheet.getRange(targetRowNum, 7);
+      var historialPrevio = [];
+      try {
+        var rawHistPrev = cellHistorial.getValue().toString().replace(/:\s*NaN\b/g, ': null');
+        if (rawHistPrev.startsWith(")]}',")) rawHistPrev = rawHistPrev.substring(5);
+        if (rawHistPrev.trim() !== '') {
+          var parsedHist = JSON.parse(rawHistPrev);
+          historialPrevio = Array.isArray(parsedHist) ? parsedHist : [parsedHist];
+        }
+      } catch (e) { historialPrevio = []; }
+
+      // Buscar la última entrada que solicitó la corrección (estadoGestion contiene "correccion" o procesoEspecial === "CORRECCION")
+      var solicitante = '';
+      for (var h = historialPrevio.length - 1; h >= 0; h--) {
+        var entrada = historialPrevio[h];
+        var esCorreccion = (entrada.estadoGestion && entrada.estadoGestion.toLowerCase().indexOf('correccion') !== -1) ||
+                           (entrada.procesoEspecial && entrada.procesoEspecial === 'CORRECCION');
+        if (esCorreccion && entrada.usuario) {
+          solicitante = entrada.usuario;
+          break;
+        }
+      }
+
+      if (solicitante) {
+        sheet.getRange(targetRowNum, 3).setValue(solicitante);
+        console.log("Caso Corregido: reasignado a solicitante original: " + solicitante);
+      } else {
+        // Fallback: si no se encuentra solicitante, asignar a expedidor
+        var asignado = obtenerSiguienteExpedidor();
+        sheet.getRange(targetRowNum, 3).setValue(asignado);
+        console.log("Caso Corregido: no se encontró solicitante, asignado a expedidor: " + asignado);
+      }
+    } else if (observaciones.estadoGestion === "Caso Especial" || observaciones.estadoGestion === "Enviar a Expedicion") {
       var asignado = obtenerSiguienteExpedidor();
       sheet.getRange(targetRowNum, 3).setValue(asignado);
     }
-    const cellObs = sheet.getRange(targetRowNum, 7);
-    let historial = [];
+
+    // Registrar en historial (columna 7) — append sin sobrescribir entradas previas
+    var cellObs = sheet.getRange(targetRowNum, 7);
+    var historial = [];
     try {
-      let rawHist = cellObs.getValue().toString().replace(/:\s*NaN\b/g, ': null');
+      var rawHist = cellObs.getValue().toString().replace(/:\s*NaN\b/g, ': null');
       if (rawHist.startsWith(")]}',")) rawHist = rawHist.substring(5);
-      const parsed = JSON.parse(rawHist);
-      historial = Array.isArray(parsed) ? parsed : [parsed];
+      if (rawHist.trim() !== '') {
+        var parsed = JSON.parse(rawHist);
+        historial = Array.isArray(parsed) ? parsed : [parsed];
+      }
     } catch (e) {
-      if (cellObs.getValue()) historial.push({
-        fecha: "Previo",
-        observacion: cellObs.getValue(),
-        usuario: "Sistema"
-      });
+      var cellValue = cellObs.getValue();
+      if (cellValue) {
+        historial.push({
+          fecha: "Previo",
+          observacion: cellValue.toString(),
+          usuario: "Sistema"
+        });
+      }
     }
 
-    const fechaCO = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
+    var fechaCO = Utilities.formatDate(new Date(), "America/Bogota", "dd/MM/yyyy HH:mm:ss");
 
-    let nuevaEntrada = {
+    // Determinar estado para historial: usa el estado enviado por el frontend
+    var estadoHistorial = observaciones.estadoGestion;
+
+    var nuevaEntrada = {
       fecha: fechaCO,
       usuario: Session.getActiveUser().getEmail(),
       observacion: observaciones.observacion,
-      estado: observaciones.estadoGestion,
+      estadoGestion: estadoHistorial,
       seguimiento: observaciones.fechaseguimiento || "N/A",
       procesoEspecial: datos.procesoEspecial || "NINGUNO"
     };
@@ -782,47 +961,116 @@ function crearFolderYGuardarArchivos(archivosBase64, datos, referencia) {
 }
 
 
+/**
+ * Guarda archivos en la carpeta de renovación del cliente en Google Drive.
+ * Procesa archivos individuales (sarlaft, propietarioDoc) y el arreglo documentosProceso
+ * para procesos especiales (Otro Sí, Cesión, Correcciones).
+ * @param {Object} archivosBase64 - Objeto con archivos en base64. Puede incluir documentosProceso (array).
+ * @param {Object} datos - Datos de la gestión (poliza, procesoEspecial, etc.).
+ * @param {Folder} carpetaRenovacion - Carpeta "Renovacion" en Google Drive.
+ * @param {Object} urlsNuevas - Objeto donde se almacenan las URLs de archivos guardados.
+ */
 function guardarArchivosEnCarpeta(archivosBase64, datos, carpetaRenovacion, urlsNuevas) {
-  const guardar = (fileObj, prefix, folder) => {
-    const ext = fileObj.name.split('.').pop();
-    const blob = Utilities.newBlob(
+  /**
+   * Decodifica un archivo base64, crea un Blob y lo guarda en la carpeta indicada.
+   * @param {Object} fileObj - Objeto con {name, mimeType, data}.
+   * @param {string} nombreArchivo - Nombre final del archivo (con extensión).
+   * @param {Folder} folder - Carpeta destino en Google Drive.
+   * @returns {string} URL del archivo guardado.
+   */
+  var guardarArchivo = function(fileObj, nombreArchivo, folder) {
+    var blob = Utilities.newBlob(
       Utilities.base64Decode(fileObj.data),
       fileObj.mimeType,
-      `${prefix}_${datos.poliza}.${ext}`
+      nombreArchivo
     );
-    const file = retryDrive(() => folder.createFile(blob));
-    console.log(`Archivo guardado: ${prefix}_${datos.poliza}.${ext}`);
-    return retryDrive(() => file.getUrl());
+    var file = retryDrive(function() { return folder.createFile(blob); });
+    console.log("Archivo guardado: " + nombreArchivo);
+    return retryDrive(function() { return file.getUrl(); });
   };
 
-  // Guardar archivos principales
+  /**
+   * Obtiene la extensión de un archivo a partir de su nombre o mimeType.
+   * @param {Object} fileObj - Objeto con {name, mimeType}.
+   * @returns {string} Extensión del archivo (sin punto).
+   */
+  var obtenerExtension = function(fileObj) {
+    if (fileObj.name && fileObj.name.indexOf('.') !== -1) {
+      return fileObj.name.split('.').pop().toLowerCase();
+    }
+    var mimeMap = {
+      'application/pdf': 'pdf',
+      'image/jpeg': 'jpg',
+      'image/png': 'png'
+    };
+    return mimeMap[fileObj.mimeType] || 'bin';
+  };
+
+  // Guardar archivos principales (sarlaft, documento propietario)
   if (archivosBase64.sarlaft) {
-    urlsNuevas.sarlaftArchivoURL = guardar(archivosBase64.sarlaft, 'SARLAFT', carpetaRenovacion);
+    var extSarlaft = obtenerExtension(archivosBase64.sarlaft);
+    urlsNuevas.sarlaftArchivoURL = guardarArchivo(
+      archivosBase64.sarlaft,
+      'SARLAFT_' + datos.poliza + '.' + extSarlaft,
+      carpetaRenovacion
+    );
   }
   if (archivosBase64.propietarioDoc) {
-    urlsNuevas.propietarioDocURL = guardar(archivosBase64.propietarioDoc, 'DOC_ID', carpetaRenovacion);
+    var extDoc = obtenerExtension(archivosBase64.propietarioDoc);
+    urlsNuevas.propietarioDocURL = guardarArchivo(
+      archivosBase64.propietarioDoc,
+      'DOC_ID_' + datos.poliza + '.' + extDoc,
+      carpetaRenovacion
+    );
   }
 
-  // Guardar archivos de procesos especiales
-  if (datos.procesoEspecial && datos.procesoEspecial !== 'NINGUNO') {
-    let especialFolder;
-    const subIter = retryDrive(() => carpetaRenovacion.getFoldersByName("Procesos Especiales"));
-    especialFolder = retryDrive(() => subIter.hasNext()) ?
-      retryDrive(() => subIter.next()) :
-      retryDrive(() => carpetaRenovacion.createFolder("Procesos Especiales"));
+  // Guardar arreglo documentosProceso (multi-archivo para procesos especiales)
+  if (archivosBase64.documentosProceso && Array.isArray(archivosBase64.documentosProceso) && archivosBase64.documentosProceso.length > 0) {
+    var prefijo = obtenerPrefijoProcesoEspecial(datos.procesoEspecial);
 
-    console.log("Guardando archivos de proceso especial: " + datos.procesoEspecial);
+    // Crear o buscar subcarpeta "Procesos Especiales"
+    var subIter = retryDrive(function() { return carpetaRenovacion.getFoldersByName("Procesos Especiales"); });
+    var especialFolder = retryDrive(function() { return subIter.hasNext(); })
+      ? retryDrive(function() { return subIter.next(); })
+      : retryDrive(function() { return carpetaRenovacion.createFolder("Procesos Especiales"); });
 
-    if (archivosBase64.otroSi) {
-      urlsNuevas.otroSiURL = guardar(archivosBase64.otroSi, 'OTRO_SI', especialFolder);
+    console.log("Guardando " + archivosBase64.documentosProceso.length + " archivos de proceso especial: " + datos.procesoEspecial);
+
+    var documentosGuardados = [];
+
+    for (var i = 0; i < archivosBase64.documentosProceso.length; i++) {
+      var archivo = archivosBase64.documentosProceso[i];
+      if (!archivo || !archivo.data || !archivo.mimeType) {
+        console.log("Archivo en índice " + i + " inválido, se omite.");
+        continue;
+      }
+
+      var ext = obtenerExtension(archivo);
+      var nombreFinal = prefijo + '_' + datos.poliza + '_' + (i + 1) + '.' + ext;
+      var url = guardarArchivo(archivo, nombreFinal, especialFolder);
+
+      documentosGuardados.push({
+        nombre: nombreFinal,
+        url: url
+      });
     }
-    if (archivosBase64.cesionCedula) {
-      urlsNuevas.cesionCedulaURL = guardar(archivosBase64.cesionCedula, 'CESION_ID', especialFolder);
-    }
-    if (archivosBase64.cesionDocAdicional) {
-      urlsNuevas.cesionDocAdicionalURL = guardar(archivosBase64.cesionDocAdicional, 'CESION_DOC', especialFolder);
-    }
+
+    urlsNuevas.documentosProceso = documentosGuardados;
   }
+}
+
+/**
+ * Obtiene el prefijo de nomenclatura para archivos según el tipo de proceso especial.
+ * @param {string} procesoEspecial - Tipo de proceso (OTRO_SI, CESION, CORRECCION).
+ * @returns {string} Prefijo para el nombre del archivo.
+ */
+function obtenerPrefijoProcesoEspecial(procesoEspecial) {
+  var prefijos = {
+    'OTRO_SI': 'OTRO_SI',
+    'CESION': 'CESION',
+    'CORRECCION': 'CORRECCION'
+  };
+  return prefijos[procesoEspecial] || 'PROCESO';
 }
 
 
@@ -1055,26 +1303,34 @@ function requestSarlaft(tipoDocumento = "CC", numeroDocumento = "1023018112") {
   return data;
 }
 
-function RenovaSendWppVencida() {
-  const myHeaders = new Headers();
-  myHeaders.append("Content-Type", "application/json");
-  myHeaders.append("Authorization", "Basic THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=");
+/**
+ * Envía mensaje WhatsApp de póliza vencida al propietario usando la API de Infobip.
+ * Usa UrlFetchApp.fetch() (API nativa de GAS) en lugar de fetch() del navegador.
+ * @param {string} nombre - Nombre del destinatario.
+ * @param {string} telefono - Número de teléfono del destinatario (con código de país).
+ * @param {string} direccion - Dirección del inmueble asociado a la póliza.
+ * @returns {{success: boolean, destino?: string, error?: string}} Resultado del envío.
+ */
+function RenovaSendWppVencida(nombre, telefono, direccion) {
+  var props = PropertiesService.getScriptProperties();
+  var authToken = props.getProperty('infobipAuthToken') || "THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=";
+  var infobipUrl = "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
 
-  const raw = JSON.stringify({
+  var headers = {
+    "Authorization": "Basic " + authToken,
+    "Content-Type": "application/json"
+  };
+
+  var payload = {
     "messages": [
       {
         "from": "573144352014",
-        "to": "573222340943",
-        "messageId": "a28dd97c-1ffb-4fcf-99f1-0b557ed381da",
+        "to": telefono,
         "content": {
           "templateName": "poliza_vencida_propietario_v2",
           "templateData": {
             "body": {
-              "placeholders": [
-                "Nikol Rodriguez",
-                "3123123",
-                "Calle 100c sur 7 45"
-              ]
+              "placeholders": [nombre, telefono, direccion]
             },
             "header": {
               "type": "IMAGE",
@@ -1086,41 +1342,59 @@ function RenovaSendWppVencida() {
         "callbackData": "Callback data"
       }
     ]
-  });
-
-  const requestOptions = {
-    method: "POST",
-    headers: myHeaders,
-    body: raw,
-    redirect: "follow"
   };
 
-  fetch("https://qgmx9r.api.infobip.com/whatsapp/1/message/template", requestOptions)
-    .then((response) => response.text())
-    .then((result) => console.log(result))
-    .catch((error) => console.error(error));
+  var options = {
+    "method": "post",
+    "headers": headers,
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(infobipUrl, options);
+    var responseCode = response.getResponseCode();
+    if (responseCode === 200 || responseCode === 201) {
+      Logger.log("WhatsApp póliza vencida enviado a " + telefono);
+      return { success: true, destino: telefono };
+    } else {
+      Logger.log("Error WhatsApp póliza vencida (" + responseCode + "): " + response.getContentText());
+      return { success: false, error: "Error al enviar WhatsApp (" + responseCode + ")" };
+    }
+  } catch (e) {
+    Logger.log("Error de conexión WhatsApp póliza vencida: " + e.toString());
+    return { success: false, error: e.toString() };
+  }
 }
 
-function RenovaSendWppProxVen() {
-  const myHeaders = new Headers();
-  myHeaders.append("Content-Type", "application/json");
-  myHeaders.append("Authorization", "Basic THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=");
+/**
+ * Envía mensaje WhatsApp de póliza próxima a vencer al propietario usando la API de Infobip.
+ * Usa UrlFetchApp.fetch() (API nativa de GAS) en lugar de fetch() del navegador.
+ * @param {string} nombre - Nombre del destinatario.
+ * @param {string} telefono - Número de teléfono del destinatario (con código de país).
+ * @param {string} direccion - Dirección del inmueble asociado a la póliza.
+ * @returns {{success: boolean, destino?: string, error?: string}} Resultado del envío.
+ */
+function RenovaSendWppProxVen(nombre, telefono, direccion) {
+  var props = PropertiesService.getScriptProperties();
+  var authToken = props.getProperty('infobipAuthToken') || "THVpc2FfU2FudG9zX01rdDpCb2xpMjAyMnZhci4=";
+  var infobipUrl = "https://qgmx9r.api.infobip.com/whatsapp/1/message/template";
 
-  const raw = JSON.stringify({
+  var headers = {
+    "Authorization": "Basic " + authToken,
+    "Content-Type": "application/json"
+  };
+
+  var payload = {
     "messages": [
       {
         "from": "573144352014",
-        "to": "573222340943",
-        "messageId": "a28dd97c-1ffb-4fcf-99f1-0b557ed381da",
+        "to": telefono,
         "content": {
           "templateName": "poliza_proxima_vencer_propietario",
           "templateData": {
             "body": {
-              "placeholders": [
-                "Nikol Rodriguez",
-                "3123123",
-                "Calle 100c sur 7 45"
-              ]
+              "placeholders": [nombre, telefono, direccion]
             },
             "header": {
               "type": "IMAGE",
@@ -1132,19 +1406,29 @@ function RenovaSendWppProxVen() {
         "callbackData": "Callback data"
       }
     ]
-  });
-
-  const requestOptions = {
-    method: "POST",
-    headers: myHeaders,
-    body: raw,
-    redirect: "follow"
   };
 
-  fetch("https://qgmx9r.api.infobip.com/whatsapp/1/message/template", requestOptions)
-    .then((response) => response.text())
-    .then((result) => console.log(result))
-    .catch((error) => console.error(error));
+  var options = {
+    "method": "post",
+    "headers": headers,
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(infobipUrl, options);
+    var responseCode = response.getResponseCode();
+    if (responseCode === 200 || responseCode === 201) {
+      Logger.log("WhatsApp póliza próxima a vencer enviado a " + telefono);
+      return { success: true, destino: telefono };
+    } else {
+      Logger.log("Error WhatsApp próxima a vencer (" + responseCode + "): " + response.getContentText());
+      return { success: false, error: "Error al enviar WhatsApp (" + responseCode + ")" };
+    }
+  } catch (e) {
+    Logger.log("Error de conexión WhatsApp próxima a vencer: " + e.toString());
+    return { success: false, error: e.toString() };
+  }
 }
 
 
